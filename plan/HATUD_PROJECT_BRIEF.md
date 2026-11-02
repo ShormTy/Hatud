@@ -1,0 +1,195 @@
+# Hatud: Project Brief (draft v0.27)
+
+> **For any AI reading this:** This file is the full context for the Hatud project. Read it before replying. Treat the "Decisions" section as settled unless the user reopens it. Do not re-propose rejected ideas without new reasoning. Last updated: November 2, 2026.
+
+---
+
+## 1. About the project
+
+**Hatud** is a ride-booking app, like Uber, made for students. The name comes from the Filipino/Visayan word for "bring or drop off someone."
+
+**Who is the user working with you?** A first-year Information Systems student who is building this as a learning project and a draft for a possible real pilot. They have **no money**, so everything must be free. Explain things in plain language, avoid unexplained jargon, and treat suggestions as ideas they can accept or reject. **User's computer (v0.26):** Linux Mint (Xfce) on a roughly 10-year-old Acer Aspire laptop, so give Linux terminal commands (apt works) and prefer light tools; the RAM amount is not yet known.
+
+**How we work together:**
+- The user states their requirements. The AI adds ideas and advice.
+- Everything is kept as a **checklist**. The user marks each item Accept or Reject, gives a reason for each rejection, and pastes the result back into chat. The AI then folds the results into the next draft version.
+- Accepted items become decisions. Rejected items are recorded with the user's reason. Do not silently drop either.
+- Ask at most one question per reply, and keep new batches of ideas small.
+- **Always send the user the updated brief file in every reply** (user's standing request, added in v0.3).
+
+---
+
+## 2. Core requirements (the user's own words, in priority order)
+
+1. **Zero cost.** Development, hosting, and maintenance must be completely free.
+   - **Strictly no credit card sign-up, even for free services.** Every service used must be free to use without putting in a card. (Added by the user in v0.4.)
+2. **Two user types only:** students and drivers.
+3. **Students request a ride; drivers can accept it.**
+
+---
+
+## 3. Decisions (accepted by the user)
+
+### Cost and tech
+- **Web app (PWA)**, not a native app (avoids Play Store and App Store fees). **Updated in v0.9:** the user "really wants it to be an app" and deployed outside Google Play. Accepted: the PWA stays the base, and an Android APK is offered as a download outside Google Play (see "App packaging" below).
+- **Maps:** OpenStreetMap with Leaflet (not Google Maps).
+- **Backend:** a free backend, Firebase free plan (Spark) or Supabase free tier, for login, database, and live updates. Firebase is preferred (see hosting below). Both must work without a credit card (see Section 5 for what was checked).
+- **Hosting:** **Firebase Hosting preferred.** If it does not work out, fall back to Cloudflare Pages, Netlify, Vercel, or GitHub Pages. Checked November 2, 2026: all four have free plans with no credit card (see Section 5 for their catches).
+- **Payments:** cash only at first. No GCash or gateway integration yet.
+- **Login:** email only. No paid SMS verification.
+- **Design and teamwork tools:** Figma (free) for mockups, GitHub for code, Google Docs for documentation. **Update v0.19:** the user will write code in **Visual Studio Code** and push it to a **GitHub repository** (accepted). The user does not know Figma yet, so the screens are planned with mockups the AI draws in chat instead (decided v0.20, Section 8 stage 2).
+- **Pilot scale:** one campus, a few dozen users, to stay inside free-tier limits.
+- **Pilot location (decided v0.12):** **Tagbilaran City, Bohol**, "for now" (the user's words). **First campus: Tagbilaran City College** (decided v0.14). **Scope change (v0.15):** the user said testing will be "all around Bohol." This conflicts with the accepted idea that the owner meets each driver in person, so see Section 5 item 18, decided in v0.16: drivers are approved step by step, starting with those the owner can meet in person.
+- **No server code; use Firestore transactions plus security rules (accepted v0.5, on condition that it needs no credit card):** the Firebase free plan (Spark) does not allow Cloud Functions, so the app is designed without them. Firestore transactions and security rules enforce "first driver to accept wins" and role permissions. The AI checked on November 2, 2026 that Spark needs no card; check Firebase's current free limits again before committing, since they change.
+- **Request expiry without a server:** each request stores an `expiresAt` time; drivers' queries only fetch requests that have not expired; security rules cap it at 24 hours from creation. No background job needed. (Accepted v0.4.)
+- **Driver's map stays on his own phone:** the driver's phone GPS (browser Geolocation API) draws his position on his own Leaflet map with **zero database writes**. Combined with "student sees status only," the driver's location is never saved to the database. (Accepted v0.4.)
+- **Free route lines:** use OpenStreetMap's free public routing server (OSRM) for the small pilot, and keep route requests low. (Accepted v0.4.)
+- **Privacy law (RA 10173, Data Privacy Act of 2012):** follow data minimization (collect only what is needed, keep it only as long as needed) and ask for clear consent. Verification stays postponed but **will be discussed next** at the user's request. It should not be dropped permanently because of real safety risk. (Accepted v0.4.)
+
+### Users
+- Only **students** and **drivers**. No admin role for now.
+- **One login system** with a `role` field (student or driver), not two apps.
+- **Profiles:** students (name, school, contact number); drivers (vehicle type, plate number, photo, **contact number**). The driver's contact number is shown to the student only after the driver accepts. (Contact number accepted v0.4.) The driver photo's storage method is not settled, see Section 5.
+- **Who can be a driver (decided v0.11): professional drivers only, for legal reasons.** The user chose option A and widened it from "tricycle drivers" to "professional drivers." The user also likes the idea of student drivers who hold a license and registration, but **that is postponed** because of the legal reasons. It can be revisited after local rules are checked. The exact meaning of "professional" (for example, tricycle drivers who operate legitimately for hire) is for the owner to confirm with local rules. Suggested check (v0.12): ask Tagbilaran City's local government, which usually regulates tricycles and other for-hire transport, what counts as a legitimate for-hire driver there.
+
+### Ride flow
+- **Manual matching:** drivers see a live list of open requests and tap Accept.
+- **Race condition rule:** if two drivers accept at once, only the first counts; the other sees "already taken." Enforced with a Firestore transaction plus security rules (no Cloud Functions, no card), see Section 3 "Cost and tech".
+- **Ride statuses:** requested, accepted, on the way, completed, cancelled.
+- **Fares (changed by the user in v0.15):** the **driver decides the fare for now**, and the user will do their own research on fares. The earlier idea of fixed fares for popular routes is postponed. **Fare flow accepted in v0.16 (Section 5 item 17):** the driver types the fare when tapping Accept; the student sees it right after acceptance together with the driver's details and can cancel before the ride starts; payment in cash. **The user added:** the student must be able to bargain, "just in case for unbelievable prices the driver has set." **Bargaining accepted in v0.17 (Section 5 item 19):** after the driver accepts with a fare, the student can send one counter-offer (a price); the driver taps "Accept counter-offer" (the fare updates) or "Keep my fare"; then the student goes ahead or cancels before the ride starts. Further haggling can happen by phone or text.
+- **Students can cancel** a request (confirmed v0.3). **Cancel window (decided v0.23):** the student can cancel until the driver taps "On the way."
+- **One active request per student** at a time (confirmed v0.3).
+- **Optional "needed by" time** on a request, so drivers know when the student wants the ride (accepted v0.4).
+
+### Revised by the user in v0.1 review
+- **Request expiry:** a request expires after a duration **the student sets, limited to a maximum of 1 day (24 hours)**. (This replaces my original "expires after a few minutes.") **Update v0.21 (the user's feedback on mockup screen 1):** the student sets the expiry with a **slider in 30-minute steps** (from 30 minutes up to the 24-hour maximum) instead of four fixed buttons. The security rules still cap it at 24 hours.
+- **Live tracking:** the **driver** must be able to see live tracking of his route to the pickup point and then to the drop-off point. The app must **not** track the student's precise location in real time. The student's location is only the pickup and drop-off pins they choose. Privacy is a concern and will be addressed later.
+
+### After a driver accepts (accepted in v0.3)
+- **Contact by phone or text, no in-app chat.** After acceptance, the student sees the driver's name, vehicle type, and plate number. The driver sees the student's name and contact number. Nobody sees these details before acceptance. Costs nothing.
+- **Student sees status updates only, not the driver's live dot.** The student sees "accepted," "on the way," and "completed," but no moving map of the driver. This keeps database writes low and fits the privacy concern. The user may reopen this later.
+- **The driver taps the status buttons** ("On the way," "Completed"). The student can still cancel before the ride starts.
+- **Simple trip history.** Each person can see a list of their past rides. Old rides are deleted automatically after 30 days (the example given and accepted). **Ratings are postponed** to a later version.
+- **Auto-delete of old trips (accepted v0.4, mechanism changed in v0.7):** the 30-day rule stands. The AI checked and found that Firestore's auto-delete feature (TTL) **requires billing to be enabled, so it breaks the no-card rule and cannot be used.** Until a card-free deletion method is chosen (proposal in Section 5), the app simply hides rides older than 30 days.
+- **Delete old trips when the person opens the app (accepted v0.8):** the app deletes that person's own rides older than 30 days when they open it, and hides them in the meantime. Free, and well inside the free daily delete limit (20,000 per day on the free plan).
+- **Driver photo left out of the pilot (accepted v0.8):** the owner meets and approves each driver in person, and plate number plus vehicle type are enough. The photo can come back later if a card-free storage method is chosen (Firebase Storage needs a card).
+- **Report button is built in the first pilot (decided v0.8, the user rejected the AI's idea of waiting).** The user's reason: "we need feedback from pilots about the web app's functions."
+- **App packaging (accepted v0.9):** the PWA stays the base: students install it with "Add to Home Screen" (works on Android and iPhone, free, updates are live immediately). On Android, an APK file made free with PWABuilder is also offered as a download from a link (for example a free GitHub release page); students switch on "install unknown apps" and install it. No Google Play, no fee. Android shows a security warning for such apps. The app is a wrapper around the website, so its content updates automatically. Not tested by the AI, verify when building. On iPhone there is no free "real app" route (App Store needs a Mac plus a paid Apple account, about $99 per year; free AltStore sideloading expires every 7 days), so iPhone users use Add to Home Screen.
+- **Free feedback form (accepted v0.9):** a Google Forms link inside the app where pilot users send feedback about the app's functions. Free, no card.
+- **Android first with an APK, iPhone as web-only testers (accepted v0.10).** The user proposed Android only for now. Agreed order of work: build and test the PWA first, make the APK last (PWABuilder needs the live website), and back up the APK's signing key. The pilot officially supports Android with the APK. **The user added:** iPhone users can also take part in the pilot as web-only testers (using the website or Add to Home Screen), if possible. It is not promised or fully tested. Also agreed: test the APK early on 2 to 3 real Android phones, write a one-page install guide with screenshots, keep Chrome's "Install app" as plan B, have students download the file only from the owner's official link, and ask the pilot group which phones they use.
+
+### Verification and safety (discussed in v0.6)
+- **Approved drivers only, approved by the owner (accepted v0.6).** A new driver account starts as "pending" and cannot see any requests. For the pilot, the user (who owns the web app) meets each driver in person on campus, checks the vehicle and plate number, and switches the account to "approved" in the free Firebase dashboard. **No ID or license is uploaded or stored.** This works at pilot size but will not scale to many drivers.
+- **Drivers see only what they need before accepting (accepted v0.6).** On open requests, drivers see pickup, drop-off, fare, and "needed by" time. The student's name and contact number appear only after the driver accepts.
+- **Report button (accepted v0.6).** After a ride, either person can flag a problem; the owner reviews it and can block that account. The AI suggested leaving it for a later version unless wanted in the first pilot; the user accepted without stating a timing, so **timing is still to be confirmed.**
+- **Approving drivers across Bohol (accepted v0.16, option A):** start with drivers the owner can meet in person (Tagbilaran) and open other areas step by step. Each new area needs its own check of local rules with that area's local government. A video-call check (option B) was not chosen and can be revisited when expanding to places further away.
+- **Check papers in person, keep nothing (accepted v0.13).** When the owner meets a driver for approval, the owner looks at the driver's license, the vehicle's registration, and any permit or franchise needed locally, but does not photograph, upload, or keep copies.
+- **Student sign-up needs a pilot invite code (accepted v0.7).** The owner hands out one shared code (for example, in a class group chat) and students must enter it to register. No school ID or ID photo is collected. The owner can change the code if it leaks. It is a simple gate, not proof of identity.
+
+---
+
+## 4. Rejected or postponed items (with the user's reasons)
+
+| Item | User's reason | Status |
+|---|---|---|
+| Host on Cloudflare Pages/Netlify/Vercel/GitHub Pages as the first choice | Prefers Firebase if possible, otherwise accept | Changed to Firebase Hosting first |
+| Verify students by school email or school ID photo | Privacy issues, to be addressed later | **Postponed.** Not used in the pilot; student check is now the accepted pilot invite code instead |
+| Verify drivers manually (ID, license, vehicle details) via database dashboard | Privacy issues, to be addressed later | **Replaced in v0.6** by the owner approving drivers in person, with no ID or license stored |
+| Original safeguards bundle (cancel, quick expiry, one active request per student) | Expiry must be set by the student, max 1 day | Expiry replaced by the request expiry rule; cancel and one-active-request confirmed as still standing |
+| "No live GPS tracking in the MVP" | Driver needs live route tracking; student's exact location must not be tracked live | Replaced by the live tracking rule above |
+| Ratings | Not rejected, just not needed yet | **Postponed** to a later version |
+| Build the report button in a later version, not in the first pilot (AI idea, v0.7) | "we need feedback from pilots about the web app's functions" | **Rejected (v0.8).** Report button goes into the first pilot |
+| Student drivers (with a license and registration) | The user likes it, but "legal reasons" | **Postponed (v0.11).** Pilot uses professional drivers only; revisit after checking local rules |
+| Fixed fares for popular routes | "just let the driver decide the fare for now, i will conduct my own research" | **Postponed (v0.15).** The driver decides the fare |
+| v0.2 advice #1: "Firebase caveat: no Cloud Functions on the free plan, so use Firestore transactions plus security rules for 'first driver wins' and role permissions" | "STRICTLY no credit card sign up for free services as well, must be free to use" | **Rejected in v0.4, then reversed in v0.5:** the user clarified they accept it as long as it needs no credit card (they do not have one). The advice avoids Cloud Functions, so it fits. Now an accepted decision. |
+
+---
+
+## 5. AI advice (checked November 2, 2026; items 5 to 11 were decided in v0.8 and v0.9 (rejected: item 7; accepted: all the others); items 12 to 14 were decided in v0.10 (all accepted, item 13 with the user's change); item 15 was decided in v0.11; item 16 was accepted in v0.13; items 17 and 18 were decided in v0.16 (both accepted; item 17 with the user's addition); item 19 was accepted in v0.17)
+
+The AI checked current plan rules with a web search on November 2, 2026. Findings:
+
+1. **Firebase Spark plan (card-free):** Firestore, Hosting, and standard email login work without a card, and the plan cannot generate a bill (a product just stops when its quota runs out). **Cloud Functions need the card-based Blaze plan.**
+2. **Firebase Cloud Storage now needs a card:** since February 3, 2026, Cloud Storage for Firebase requires the Blaze plan, even at tiny usage. So **driver photos cannot be stored in Firebase Storage** under the no-card rule. Proposed options (pick one):
+   - (a) leave the driver photo out of the pilot (plate number and vehicle type are enough for now);
+   - (b) store one small, compressed photo inside the driver's database record (works but is limited in size);
+   - (c) use Supabase's free file storage if the project ever switches to Supabase.
+3. **Supabase free plan is card-free** and includes login, a database, security rules (Row Level Security), and about 1 GB of file storage. Catch: a free project **pauses after about 7 days with no activity**, and it has limits of roughly 500 MB database and 50,000 monthly users. It remains a possible backup if Firebase does not fit.
+4. **Hosting fallbacks checked (card-free):** Cloudflare Pages and GitHub Pages are the safest fallbacks (Cloudflare has generous bandwidth; GitHub Pages needs a public repository on the free plan). Netlify's free plan runs on monthly credits and pauses projects when they run out. Vercel's free Hobby plan is for non-commercial use only. Firebase Hosting stays first.
+5. **(Accepted v0.8) Driver photo, option (a):** leave the photo out of the pilot. The owner meets and approves each driver in person anyway (accepted v0.6), and plate number plus vehicle type are enough for passengers. The photo can come back later if a card-free storage method is chosen. Other options remain (b) one tiny compressed photo inside the database record, or (c) Supabase storage.
+6. **(Accepted v0.8) Card-free way to delete old trips:** since TTL needs billing, the app deletes a person's own rides older than 30 days when they open the app (a "tidy up on open" step). This costs nothing and uses a small part of the free daily delete quota (20,000 deletes per day on the free plan). Rides older than 30 days are also hidden from view.
+7. **(Rejected v0.8) Report button in a later version, not in the first pilot.** The user's reason: "we need feedback from pilots about the web app's functions." So the report button is built in the first pilot.
+8. **(Accepted v0.9) Real-app feel, PWA stays the base:** students install Hatud from the browser with "Add to Home Screen." It gets an icon, full-screen display, and no browser bar, with no store, no account, and no fee, and updates are live immediately. Works on Android and iPhone.
+9. **(Accepted v0.9) Android: also offer a downloadable app file (APK):** PWABuilder (made by Microsoft, free, asks for no account) can package the same website as an Android app. Students download the file from a link (for example a free GitHub release page), switch on "install unknown apps," and install it. No Google Play and no $25 Play fee. Catches: Android shows a security warning for apps from outside Google Play; the app is a wrapper around the website, so the app's content updates automatically, but the wrapper itself would need reinstalling if it ever changes. Not tested by the AI; verify when building.
+10. **(Accepted v0.9) iPhone: no free "real app" route.** An App Store listing needs a Mac with Xcode and a paid Apple Developer account (about $99 per year in the sources found), and free sideloading with AltStore expires every 7 days. So iPhone users use Add to Home Screen (item 8).
+11. **(Accepted v0.9) Free feedback form for pilot users:** a Google Forms link inside the app where pilot users can send feedback about the app's functions. Free, no card, and it fits the user's reason for wanting pilot feedback.
+12. **(Accepted v0.10) Advice on "Android-only APK for now": yes, with the order of work below.** Build and test the PWA first and make the APK as a last step, because PWABuilder needs the website to be live online. When making the APK, back up its signing key (the file that proves the app is yours). If it is lost, students would have to uninstall and reinstall to get updates.
+13. **(Accepted v0.10, with the user's change) Android first, iPhone unofficial:** the pilot officially supports Android. iPhone users can still open the website and use Add to Home Screen, but it is not tested or promised. The code is the same either way, so "Android only" saves testing time, not coding time. Suggest the owner first asks the pilot group which phones they use, to confirm that most are Android. **User's change (v0.10):** iPhone users can also take part in the pilot as web-only testers, if possible.
+14. **(Accepted v0.10) Plan B and install guide:** test the APK on 2 to 3 real Android phones early (some phones warn about or block unknown apps), write a one-page install guide with screenshots, and keep Chrome's "Install app" as plan B for any phone where the APK fails. Students should only download the file from the owner's official link.
+15. **(Decided v0.11: option A, widened by the user to "professional drivers only") Who can be a driver, three options:**
+   - **A. Tricycle drivers only (AI recommends this for the pilot).** Easiest for the owner to meet and approve in person. Tricycles often already run on set routes with set fares, which fits the accepted "fixed fares" rule. Students are passengers only.
+   - **B. Student drivers only.** Peers, and possibly easier to find, but harder to check a license and vehicle. Rules about carrying passengers for pay vary, and the AI is not a lawyer, so check local rules (local government, LTO, or a tricycle association) before the pilot.
+   - **C. Both.** More drivers, but double the checking and double the rules to look into.
+16. **(Accepted v0.13) Check papers in person, keep nothing:** when the owner meets a driver for approval, also look at the driver's license, the vehicle's registration, and any permit or franchise needed locally, but do not photograph, upload, or keep copies. This fits the privacy rule (collect only what is needed) and costs nothing. What counts as a legitimate for-hire driver is for the owner to confirm with local rules.
+17. **(Accepted v0.16, with the user's addition) Fare flow when the driver decides:** the driver types the fare when tapping Accept. The student sees the fare together with the driver's details right after acceptance, and can cancel before the ride starts if they do not agree (the accepted cancel rule). The fare is paid in cash and saved on the ride record (empty until a driver accepts). Possible later: students type the fare they would like to offer. **User's addition (v0.16):** the student should be able to bargain "just in case for unbelievable prices the driver has set." See item 19.
+18. **(Decided v0.16: option A) Approving drivers outside Tagbilaran** (since testing will be all around Bohol, and the accepted rule is that the owner meets each driver in person). Options:
+   - **A. Start with drivers the owner can meet in person** (Tagbilaran) and open other areas step by step.
+   - **B. Video-call check:** the driver shows license, registration, and permit on camera using a free app (Messenger or Google Meet), nothing is recorded or saved, and then the owner switches approval on.
+   - **C. A trusted local helper** in each area does the in-person check.
+   AI recommends A first, and B for places further away. Rules for for-hire transport can differ by municipality, so check each area's local government. The user chose A. B was not chosen and can be revisited when expanding to places further away.
+19. **(Accepted v0.17) Simple bargaining:** after the driver accepts with a fare, the student can send **one counter-offer** (a price) with a button. The driver sees it and taps either "Accept counter-offer" (the fare updates) or "Keep my fare." Then the student decides to go ahead or cancel before the ride starts. Further haggling can happen by phone or text, since contact details are shared after acceptance. This costs nothing and needs only one extra field on the ride. The report button (in the pilot) and the feedback form can also be used to flag unreasonable prices.
+
+---
+
+## 6. Draft data model (starting point)
+
+- **users:** id, name, role (student/driver), school, contact number, created date, blocked (yes/no, set by the owner)
+- **drivers:** user_id, vehicle type, plate number, contact number, photo (left out of the pilot, see Section 3), availability, approval status (pending/approved, set by the owner)
+- **reports:** id, ride_id, reporter_id, reason, created_at, status (new/reviewed) (built in the first pilot, decided v0.8)
+- **settings:** the current pilot invite code (set and changed by the owner)
+- **rides:** id, student_id, driver_id (empty until accepted), pickup (lat/lng + label), dropoff (lat/lng + label), fare (set by the driver when accepting), counter_offer (optional, accepted v0.17), status, needed_by (optional), expires_at, created_at, delete_after (for the 30-day trip history rule)
+- **routes (fixed fares):** *postponed in v0.15, not needed while drivers decide the fare* (id, origin, destination, fare)
+
+Not yet included because not yet decided: ratings (postponed), payments table (cash only for now, so may be a simple field on rides), reports.
+
+---
+
+## 7. Open questions
+
+1. *(Resolved, kept for reference.)* The pilot invite code (accepted v0.7) was explained to the user in v0.6 as: a **pilot** is the small first test with a real but small group (here, one campus and a few dozen users) before opening the app widely. An **invite code** is a shared secret word or number the owner gives only to the people they want (for example, in a class group chat); the app asks for it at sign-up, so strangers cannot register. It collects no personal data, and the owner can change the code if it leaks. It is a simple gate, not proof of identity. Accepted by the user.
+2. *(Resolved v0.11, see Section 3: professional drivers only.)*
+3. *(Resolved v0.12: Tagbilaran City, Bohol, for now. See Question 5 for the details still missing.)*
+4. How will Hatud ever earn money, given the zero-cost rule? (Not discussed yet; low priority.)
+5. *(Resolved v0.15: fixed fares postponed; the driver decides the fare for now.)*
+6. *(Resolved v0.16: option A, step by step starting with drivers the owner can meet in person.)*
+7. *(Resolved v0.20: option A, the AI draws simple mockups in chat.)*
+Resolved earlier: what happens after a driver accepts (v0.3); cancel and one-active-request still stand (v0.3); how "first driver wins" is enforced (v0.5); driver photo, trip deletion, and report button timing (v0.8); app packaging, Android APK, and iPhone web-only testing (v0.9 and v0.10); who can be a driver (v0.11); pilot location (v0.12); first campus (v0.14); fares set by the driver (v0.15); the fare flow and approving drivers across Bohol (v0.16); bargaining (v0.17); how to plan the screens (v0.20).
+
+---
+
+## 8. Build order (proposed in v0.18; reviewed by the user in v0.19 and v0.20: all stages accepted, stage 2 with option A)
+
+Idea: build the smallest working version first (one student, one driver, one ride), then add features on top. Every tool is free and needs no credit card. Never click "upgrade" to the card-based Blaze plan in Firebase.
+
+1. **Set up the free tools (accepted v0.19). Progress (v0.25): the GitHub repository exists (https://github.com/ShormTy/Hatud, public, empty when checked) and Visual Studio Code is installed with the folder Hatud/plan holding this brief. v0.27: git is installed and set up on the user's computer (folder /home/shormty/Apps/Code/Website/Hatud, git init done). Next: git add ., commit, and push to the repository, then create the Firebase project.** GitHub (code), a Firebase project on the free Spark plan, and Visual Studio Code as the code editor (the user pushes the code to a GitHub repository). Figma is optional for now, see stage 2. Firebase's free local testing tool (the emulator) lets you try the rules on your own computer.
+2. **Plan the screens (decided v0.20: option A).** Student: request a ride, my ride. Driver: open requests, accept with a fare, ride status. Owner: approve drivers (this can stay in the Firebase dashboard for the pilot). It was planned in Figma, but the user does not know Figma. Options: **A.** the AI draws simple screen mockups in chat, one or two at a time, and the user says what to change (AI recommends this for a beginner); **B.** paper or phone-notes sketches; **C.** learn Figma basics later, optional (free, but takes time away from building). **The user chose A (v0.20):** the AI draws simple mockups in chat, one or two screens at a time, and the user says what to change. Screens to draw, in order: (1) student request screen, (2) driver open requests list with accept-with-fare, (3) student "my ride" screen with the counter-offer, (4) driver ride status screen, (5) login and sign-up with the invite code. **Mockups drawn so far:** screens 1 and 2 (v0.20). User feedback in v0.21: the expiry should be a slider in 30-minute steps, so screen 1 was redrawn with the slider (screen 2 unchanged). In a later chat the user asked the AI to redraw screens 1 and 2 (the earlier drawings were not visible to the new AI session); both were redrawn with the slider on screen 1. **v0.22: the user approved screens 1 and 2 as drawn.** Screens 3 (student "my ride" with a one-time counter-offer and cancel) and 4 (driver ride status with his own map, student details, answering the counter-offer, and status buttons) were drawn in v0.22. **v0.23: the user approved screens 3 and 4 as drawn, including the cancel rule: the student can cancel until the driver taps "On the way."** Screen 5 (sign-up: student or driver choice, email and password, name and contact number; students add school and the pilot invite code; drivers add vehicle type and plate number and see a "pending until the owner approves" note; a consent checkbox for the Data Privacy Act; a "Log in" link for existing accounts) was drawn in v0.23. **v0.24: the user approved screen 5 as drawn. All five screens are approved and stage 2 is complete.**
+3. **Login and roles.** Email login, a role (student or driver), the invite code for students, and drivers start as "pending" until the owner approves them.
+4. **Student requests a ride.** Map (Leaflet with OpenStreetMap), pickup and drop-off pins, student-set expiry (maximum 24 hours), optional "needed by" time, one active request per student, and cancel.
+5. **Driver side.** Live list of open, unexpired requests; Accept with a fare ("first driver wins" through a Firestore transaction and security rules); contact details shown only after accepting; status buttons ("On the way," "Completed"); the driver's own live map (GPS stays on his phone) with the route to pickup and then to drop-off.
+6. **The rest of the accepted features.** Counter-offer (bargaining), trip history with the 30-day tidy-up when the app opens, the report button, and the link to the Google Forms feedback form.
+7. **Put it online and make it installable.** Firebase Hosting, the PWA setup (icon, manifest), and testing with a few friends. Then make the Android APK with PWABuilder, write the one-page install guide, and test on 2 to 3 real Android phones. iPhone users test the website or Add to Home Screen.
+8. **Start the pilot.** Tagbilaran City College first, with drivers the owner has met and approved, then open other areas step by step. Watch the free limits and collect feedback.
+
+Stages 3 to 8 were accepted by the user in v0.19 (no changes requested).
+
+---
+
+## 9. Instructions for the next AI session
+
+- Start by summarizing this brief back to the user in two or three sentences to confirm you understand.
+- **Send the updated brief file with every reply.**
+- Next step: all five screens are approved (v0.24). Section 8 stage 1 is in progress (v0.25): the GitHub repository and Visual Studio Code are done. The user was given steps to push the Hatud folder to the repository. Once they confirm it worked, set up a Firebase project on the free Spark plan (never click upgrade to Blaze), one small step at a time. The repository is public, so never put passwords or secret keys in it. After that, when the user is ready, start building at stage 1, one stage at a time, in plain language, with free, card-free tools only. Open question 4 (how Hatud could earn money) stays low priority.
+- Present new ideas as a short checklist the user can accept or reject, asking for a reason on rejections.
+- **Every service must be free with no credit card.** If a suggestion has any possible cost or needs a card, say so clearly and offer a free, card-free alternative.
+- Free-tier limits and pricing change over time. Verify current limits with a web search before recommending a specific service.
+- Update this file (bump the version number) whenever decisions change.
