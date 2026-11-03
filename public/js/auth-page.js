@@ -1,4 +1,4 @@
-// Log in / sign up page (index.html).
+// Log in / sign up page (login.html).
 import { auth, db } from "./firebase.js";
 import { makeCaps } from "./caps.js";
 import {
@@ -324,3 +324,6 @@ onAuthStateChanged(auth, (user) => {
 });
 
 updateForm();
+
+// The Sign up button on the home page opens this page on the Sign up tab.
+if (location.hash === "#signup") setMode("signup");

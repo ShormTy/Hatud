@@ -12,12 +12,12 @@ export function requireRole(role) {
       stop();
       try {
         if (!user) {
-          location.replace("index.html");
+          location.replace("login.html");
           return;
         }
         const snap = await getDoc(doc(db, "users", user.uid));
         if (!snap.exists()) {
-          location.replace("index.html");
+          location.replace("login.html");
           return;
         }
         const profile = snap.data();
@@ -35,5 +35,5 @@ export function requireRole(role) {
 
 export async function logOut() {
   await signOut(auth);
-  location.replace("index.html");
+  location.replace("login.html");
 }

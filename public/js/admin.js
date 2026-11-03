@@ -265,13 +265,13 @@ async function load() {
   render();
 }
 
-byId("signout").onclick = () => signOut(auth).then(() => location.replace("index.html"));
+byId("signout").onclick = () => signOut(auth).then(() => location.replace("login.html"));
 byId("refresh").onclick = load;
 byId("search").oninput = render;
 
 const stop = onAuthStateChanged(auth, async (user) => {
   stop();
-  if (!user) { location.replace("index.html"); return; }
+  if (!user) { location.replace("login.html"); return; }
   try {
     const admin = await getDoc(doc(db, "admins", user.uid));
     if (!admin.exists()) { say("Not an admin. Your UID is " + user.uid + ". No document admins/" + user.uid + " was found."); return; }

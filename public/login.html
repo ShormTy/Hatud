@@ -1,0 +1,120 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Log in • Hatud</title>
+  <meta name="robots" content="noindex">
+  <link rel="stylesheet" href="css/app.css">
+  <link rel="manifest" href="manifest.webmanifest">
+  <meta name="theme-color" content="#11171d">
+  <script src="js/theme.js"></script>
+  <link rel="icon" href="icons/icon.svg" type="image/svg+xml">
+  <link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
+  <script src="js/pwa.js" defer></script>
+</head>
+<body>
+  <main>
+    <a href="index.html" style="display: inline-block; margin-bottom: 12px; color: var(--brand)">&larr; Home</a>
+    <svg class="logo-anim" viewBox="56 140 400 232" role="img" aria-label="Hatud logo">
+      <g transform="translate(14 0)" fill="currentColor">
+        <rect class="streak s1" x="100" y="185" width="68" height="22" rx="11" fill-opacity=".5"/>
+        <rect class="streak s2" x="70" y="245" width="98" height="22" rx="11" fill-opacity=".85"/>
+        <rect class="streak s3" x="112" y="305" width="56" height="22" rx="11" fill-opacity=".5"/>
+        <g class="logo-h">
+          <g transform="translate(256 256) skewX(-14) translate(-256 -256)">
+            <rect x="206" y="156" width="56" height="200" rx="14"/>
+            <rect x="330" y="156" width="56" height="200" rx="14"/>
+            <rect x="206" y="232" width="180" height="48" rx="10"/>
+          </g>
+        </g>
+      </g>
+    </svg>
+    <h1>Hatud</h1>
+    <p class="tagline">Rides for students</p>
+
+    <div class="card">
+      <!-- Shown when nobody is signed in -->
+      <section id="auth-view">
+        <div class="tabs" role="tablist">
+          <button type="button" role="tab" id="tab-login" aria-selected="true">Log in</button>
+          <button type="button" role="tab" id="tab-signup" aria-selected="false">Sign up</button>
+        </div>
+
+        <form id="auth-form" novalidate>
+          <!-- Sign-up only: who you are -->
+          <div class="signup-only hidden">
+            <fieldset>
+              <legend>I am a</legend>
+              <div class="choice">
+                <label><input type="radio" name="role" value="student" checked><span>Student</span></label>
+                <label><input type="radio" name="role" value="driver"><span>Driver</span></label>
+              </div>
+            </fieldset>
+
+            <label for="full-name">Full name</label>
+            <input id="full-name" type="text" autocomplete="name" maxlength="60">
+
+            <div class="student-only">
+              <label for="school">School</label>
+              <input id="school" type="text" maxlength="80" placeholder="Tagbilaran City College">
+            </div>
+
+            <div class="driver-only hidden">
+              <label for="vehicle-type">Vehicle type</label>
+              <input id="vehicle-type" type="text" autocapitalize="characters" maxlength="30" placeholder="TRICYCLE, HABAL-HABAL, CAR…">
+
+              <label for="plate">Plate number</label>
+              <input id="plate" type="text" autocapitalize="characters" maxlength="12">
+              <p class="hint">Drivers are approved in person by the owner before they can see ride requests.</p>
+            </div>
+
+            <label for="contact">Contact number</label>
+            <input id="contact" type="tel" autocomplete="tel" inputmode="tel" maxlength="20" placeholder="09xx xxx xxxx">
+
+            <div class="student-only">
+              <label for="invite">Pilot invite code</label>
+              <input id="invite" type="text" autocomplete="off" autocapitalize="off" maxlength="60">
+              <p class="hint">Ask the Hatud owner for the code.</p>
+            </div>
+          </div>
+
+          <label for="email">Email</label>
+          <input id="email" type="email" autocomplete="email" inputmode="email" required>
+
+          <!-- Sign-up only: type the email twice, so a typo does not lock the person out -->
+          <div class="signup-only hidden">
+            <label for="email2">Type your email again</label>
+            <input id="email2" type="email" autocomplete="off" autocapitalize="off" inputmode="email">
+          </div>
+
+          <label for="password">Password</label>
+          <input id="password" type="password" autocomplete="current-password" minlength="6" required>
+          <button type="button" id="forgot" style="background: none; border: none; box-shadow: none; width: auto; min-height: 0; padding: 8px 0; color: var(--brand); font: inherit; text-decoration: underline; cursor: pointer;">Forgot password?</button>
+
+          <!-- Sign-up only: consent (draft wording, owner to review) -->
+          <label class="consent signup-only hidden">
+            <input id="consent" type="checkbox">
+            <span>I agree that Hatud keeps my name and contact number, plus my school (students) or vehicle details (drivers), to run this pilot. A driver’s contact number is shown to a student only after the driver accepts that student’s ride, and a student’s name and contact number are shown to the driver who accepts it. A driver’s phone uses its own location to show distances and routes, and Hatud does not save it. To draw road routes, the pickup, drop-off and driver’s points are sent to a free public routing service (OpenStreetMap’s OSRM), and the maps come from OpenStreetMap. Ride records are kept for about 30 days and are then deleted when I next open the app. If I report a ride, the owner can read my report and may block an account. I can ask the owner to delete my account and data. <a href="privacy.html" target="_blank" rel="noopener" style="color: var(--brand)">Read the privacy notice</a>.</span>
+          </label>
+
+          <button class="primary" id="submit" type="submit">Log in</button>
+        </form>
+      </section>
+
+      <!-- Shown when somebody is signed in -->
+      <section id="signed-in-view" class="signed-in hidden">
+        <p id="profile-title">Loading…</p>
+        <p class="email" id="signed-in-email"></p>
+        <p class="status hidden" id="profile-status"></p>
+        <button class="primary" id="signout" type="button">Sign out</button>
+      </section>
+
+      <div id="message" class="hidden" role="alert"></div>
+    </div>
+    <p class="hint" style="text-align: center"><a href="privacy.html" style="color: var(--brand)">Privacy notice</a></p>
+  </main>
+
+  <script type="module" src="js/auth-page.js"></script>
+</body>
+</html>

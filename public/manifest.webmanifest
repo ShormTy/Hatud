@@ -3,7 +3,7 @@
   "short_name": "Hatud",
   "description": "Rides for students",
   "lang": "en",
-  "start_url": "/index.html",
+  "start_url": "/login.html",
   "scope": "/",
   "display": "standalone",
   "orientation": "portrait",

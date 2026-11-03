@@ -3,7 +3,8 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Hatud</title>
+  <title>Hatud: Rides for students</title>
+  <meta name="description" content="Hatud connects students with approved local drivers. Pin your pickup and drop-off, agree on the fare, and go.">
   <link rel="stylesheet" href="css/app.css">
   <link rel="manifest" href="manifest.webmanifest">
   <meta name="theme-color" content="#11171d">
@@ -11,6 +12,31 @@
   <link rel="icon" href="icons/icon.svg" type="image/svg+xml">
   <link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
   <script src="js/pwa.js" defer></script>
+  <style>
+    body { align-items: flex-start; }
+    main { max-width: 520px; padding-top: 8px; }
+    .intro { margin: 0 0 6px; font-size: 22px; font-weight: 700; text-align: center; line-height: 1.25; }
+    .lead { margin: 0 0 16px; text-align: center; color: var(--muted); }
+    .cta { display: block; text-align: center; text-decoration: none; margin-top: 10px; }
+    .ghost { background: transparent; color: var(--brand); border: 1px solid var(--brand); }
+    .section { margin-top: 16px; }
+    .section h2 { margin: 0 0 10px; font-size: 18px; color: var(--brand); }
+    .section h3 { margin: 14px 0 6px; font-size: 15px; }
+    .steps { list-style: none; margin: 0; padding: 0; counter-reset: step; }
+    .steps li { position: relative; margin: 0 0 10px; padding-left: 36px; counter-increment: step; }
+    .steps li::before {
+      content: counter(step);
+      position: absolute; left: 0; top: 1px;
+      width: 24px; height: 24px; border-radius: 50%;
+      background: var(--brand); color: var(--brand-text);
+      font-size: 13px; font-weight: 700; text-align: center; line-height: 24px;
+    }
+    .safe { margin: 0; padding-left: 20px; }
+    .safe li { margin: 0 0 8px; }
+    .note { margin: 0; color: var(--muted); font-size: 14px; }
+    .foot { margin: 18px 0 8px; text-align: center; font-size: 13px; color: var(--muted); }
+    .foot a { color: var(--brand); }
+  </style>
 </head>
 <body>
   <main>
@@ -32,87 +58,58 @@
     <p class="tagline">Rides for students</p>
 
     <div class="card">
+      <p class="intro">Need a ride to school? Ask, agree on the fare, go.</p>
+      <p class="lead">Hatud connects students with approved local drivers. Pin where you are and where you are going, a driver nearby accepts, and you agree on the fare before the ride starts.</p>
+
       <!-- Shown when nobody is signed in -->
-      <section id="auth-view">
-        <div class="tabs" role="tablist">
-          <button type="button" role="tab" id="tab-login" aria-selected="true">Log in</button>
-          <button type="button" role="tab" id="tab-signup" aria-selected="false">Sign up</button>
-        </div>
-
-        <form id="auth-form" novalidate>
-          <!-- Sign-up only: who you are -->
-          <div class="signup-only hidden">
-            <fieldset>
-              <legend>I am a</legend>
-              <div class="choice">
-                <label><input type="radio" name="role" value="student" checked><span>Student</span></label>
-                <label><input type="radio" name="role" value="driver"><span>Driver</span></label>
-              </div>
-            </fieldset>
-
-            <label for="full-name">Full name</label>
-            <input id="full-name" type="text" autocomplete="name" maxlength="60">
-
-            <div class="student-only">
-              <label for="school">School</label>
-              <input id="school" type="text" maxlength="80" placeholder="Tagbilaran City College">
-            </div>
-
-            <div class="driver-only hidden">
-              <label for="vehicle-type">Vehicle type</label>
-              <input id="vehicle-type" type="text" autocapitalize="characters" maxlength="30" placeholder="TRICYCLE, HABAL-HABAL, CAR…">
-
-              <label for="plate">Plate number</label>
-              <input id="plate" type="text" autocapitalize="characters" maxlength="12">
-              <p class="hint">Drivers are approved in person by the owner before they can see ride requests.</p>
-            </div>
-
-            <label for="contact">Contact number</label>
-            <input id="contact" type="tel" autocomplete="tel" inputmode="tel" maxlength="20" placeholder="09xx xxx xxxx">
-
-            <div class="student-only">
-              <label for="invite">Pilot invite code</label>
-              <input id="invite" type="text" autocomplete="off" autocapitalize="off" maxlength="60">
-              <p class="hint">Ask the Hatud owner for the code.</p>
-            </div>
-          </div>
-
-          <label for="email">Email</label>
-          <input id="email" type="email" autocomplete="email" inputmode="email" required>
-
-          <!-- Sign-up only: type the email twice, so a typo does not lock the person out -->
-          <div class="signup-only hidden">
-            <label for="email2">Type your email again</label>
-            <input id="email2" type="email" autocomplete="off" autocapitalize="off" inputmode="email">
-          </div>
-
-          <label for="password">Password</label>
-          <input id="password" type="password" autocomplete="current-password" minlength="6" required>
-          <button type="button" id="forgot" style="background: none; border: none; box-shadow: none; width: auto; min-height: 0; padding: 8px 0; color: var(--brand); font: inherit; text-decoration: underline; cursor: pointer;">Forgot password?</button>
-
-          <!-- Sign-up only: consent (draft wording, owner to review) -->
-          <label class="consent signup-only hidden">
-            <input id="consent" type="checkbox">
-            <span>I agree that Hatud keeps my name and contact number, plus my school (students) or vehicle details (drivers), to run this pilot. A driver’s contact number is shown to a student only after the driver accepts that student’s ride, and a student’s name and contact number are shown to the driver who accepts it. A driver’s phone uses its own location to show distances and routes, and Hatud does not save it. To draw road routes, the pickup, drop-off and driver’s points are sent to a free public routing service (OpenStreetMap’s OSRM), and the maps come from OpenStreetMap. Ride records are kept for about 30 days and are then deleted when I next open the app. If I report a ride, the owner can read my report and may block an account. I can ask the owner to delete my account and data. <a href="privacy.html" target="_blank" rel="noopener" style="color: var(--brand)">Read the privacy notice</a>.</span>
-          </label>
-
-          <button class="primary" id="submit" type="submit">Log in</button>
-        </form>
-      </section>
-
+      <div id="guest-actions">
+        <a class="primary cta" href="login.html">Log in</a>
+        <a class="primary cta ghost" href="login.html#signup">Sign up</a>
+      </div>
       <!-- Shown when somebody is signed in -->
-      <section id="signed-in-view" class="signed-in hidden">
-        <p id="profile-title">Loading…</p>
-        <p class="email" id="signed-in-email"></p>
-        <p class="status hidden" id="profile-status"></p>
-        <button class="primary" id="signout" type="button">Sign out</button>
-      </section>
-
-      <div id="message" class="hidden" role="alert"></div>
+      <div id="member-actions" class="hidden">
+        <a class="primary cta" href="login.html">Open Hatud</a>
+      </div>
     </div>
-    <p class="hint" style="text-align: center"><a href="privacy.html" style="color: var(--brand)">Privacy notice</a></p>
+
+    <div class="card section">
+      <h2>How it works</h2>
+      <h3>For students</h3>
+      <ol class="steps">
+        <li>Pin your pickup and drop-off on the map and send your request.</li>
+        <li>A driver accepts and names a fare. Agree to it, send one lower offer, or decline and let another driver take it.</li>
+        <li>Meet your driver and pay in cash.</li>
+      </ol>
+      <h3>For drivers</h3>
+      <ol class="steps">
+        <li>Sign up. The Hatud owner meets you and approves your vehicle in person.</li>
+        <li>See open requests near you, nearest first, and accept the ones you want at your own fare.</li>
+        <li>Tap On the way and Completed as the ride goes.</li>
+      </ol>
+    </div>
+
+    <div class="card section">
+      <h2>Made with safety in mind</h2>
+      <ul class="safe">
+        <li>Drivers are approved in person before they can see any request.</li>
+        <li>Your name and phone number are shared only with the driver who accepts your ride, and the driver&rsquo;s details with you.</li>
+        <li>Hatud does not follow your location. You choose the pickup and drop-off pins.</li>
+        <li>Something went wrong? Either side can report a ride, and the owner can block an account.</li>
+        <li>No payments in the app. Fares are agreed first and paid in cash.</li>
+      </ul>
+    </div>
+
+    <div class="card section">
+      <h2>A pilot for students</h2>
+      <p class="note">Hatud is a small pilot. To sign up as a student you need the invite code from the Hatud owner, usually shared in your class group chat. Drivers sign up and then wait for approval.</p>
+    </div>
+
+    <p class="foot">
+      <a href="privacy.html">Privacy notice</a> &middot;
+      <a href="mailto:hatud.support@gmail.com">hatud.support@gmail.com</a>
+    </p>
   </main>
 
-  <script type="module" src="js/auth-page.js"></script>
+  <script type="module" src="js/home.js"></script>
 </body>
 </html>

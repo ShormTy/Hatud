@@ -28,7 +28,7 @@ Status: the pilot build is finished (login, rides, fares, history, reports, admi
 ## Folders
 
 - `public/` is the website that gets deployed.
-  - Pages: `index.html` (log in and sign up), `student.html`, `driver.html`, `admin.html`, `404.html`, `privacy.html` (privacy notice).
+  - Pages: `index.html` (home page), `login.html` (log in and sign up), `student.html`, `driver.html`, `admin.html`, `404.html`, `privacy.html` (privacy notice).
   - `css/app.css` and `css/app-pages.css` hold the styles.
   - `js/firebase.js` starts Firebase once; `js/firebase-config.js` holds the project's public web settings.
   - `js/session.js` checks who is signed in and their role; `js/auth-page.js` is the log in and sign up code.
