@@ -93,3 +93,7 @@ input[type="datetime-local"] { min-height: 46px; }
 
 /* Counter-offer buttons inside the driver-box panels */
 .driver-box button { margin-top: 10px; }
+
+/* Past rides list (student and driver pages) */
+.history-item { padding: 10px 0; border-top: 1px solid var(--line); }
+.history-item:first-child { border-top: 0; }

@@ -602,7 +602,61 @@ function renderCounter(ride) {
   }
 }
 
+// ---------- Past rides (about 30 days) ----------
+// The page already listens to every ride this driver accepted, so the list costs
+// no extra reads. Rides older than 30 days are hidden here and are removed from the
+// database when the student's app tidies up.
+
+const FINISHED = ["completed", "cancelled"];
+
+function rideMillis(data) {
+  const t = data.completedAt || data.createdAt;
+  return t ? t.toDate().getTime() : 0;
+}
+
+function historyLine(parent, label, text) {
+  const p = document.createElement("p");
+  p.className = "ride-line";
+  const strong = document.createElement("strong");
+  strong.textContent = label + " ";
+  p.appendChild(strong);
+  p.appendChild(document.createTextNode(text));
+  parent.appendChild(p);
+}
+
+function renderHistory() {
+  const now = Date.now();
+  const past = myRides
+    .filter((r) => FINISHED.includes(r.data.status)
+      && (!r.data.deleteAfter || r.data.deleteAfter.toDate().getTime() > now))
+    .sort((a, b) => rideMillis(b.data) - rideMillis(a.data));
+
+  byId("history").classList.toggle("hidden", past.length === 0);
+  const list = byId("history-list");
+  list.textContent = "";
+
+  past.forEach((r) => {
+    const d = r.data;
+    const item = document.createElement("div");
+    item.className = "history-item";
+    const when = new Date(rideMillis(d)).toLocaleString([], {
+      month: "short", day: "numeric", hour: "numeric", minute: "2-digit"
+    });
+    const head = document.createElement("p");
+    head.className = "ride-line";
+    const strong = document.createElement("strong");
+    strong.textContent = when + " • " + (d.status === "completed" ? "Completed" : "Cancelled");
+    head.appendChild(strong);
+    item.appendChild(head);
+    historyLine(item, "From:", placeText(d.pickup, "Pin A on the map"));
+    historyLine(item, "To:", placeText(d.dropoff, "Pin B on the map"));
+    if (d.fare !== null && d.fare !== undefined) historyLine(item, "Fare:", "₱" + d.fare + " (cash)");
+    list.appendChild(item);
+  });
+}
+
 async function renderCurrent() {
+  renderHistory();
   const active = myRides.find(isActiveRide);
 
   // A ride this driver was on has ended.

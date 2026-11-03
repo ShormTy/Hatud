@@ -8,6 +8,8 @@ import {
   getDoc,
   updateDoc,
   deleteDoc,
+  query,
+  where,
   onSnapshot,
   writeBatch,
   serverTimestamp,
@@ -506,6 +508,97 @@ function startWatchingMe() {
   );
 }
 
+// ---------- Past rides and the 30-day tidy-up ----------
+// Finished rides (completed, cancelled, expired) are listed for about 30 days.
+// When the page opens, this student's own rides older than that are deleted.
+// Nothing here needs a server: it only runs on his phone, for his own rides.
+
+const FINISHED = ["completed", "cancelled", "expired"];
+let historyStarted = false;
+let tidied = false;
+
+function rideMillis(data) {
+  const t = data.completedAt || data.createdAt;
+  return t ? t.toDate().getTime() : 0;
+}
+
+function historyLine(parent, label, text) {
+  const p = document.createElement("p");
+  p.className = "ride-line";
+  const strong = document.createElement("strong");
+  strong.textContent = label + " ";
+  p.appendChild(strong);
+  p.appendChild(document.createTextNode(text));
+  parent.appendChild(p);
+}
+
+function renderHistory(past) {
+  const list = byId("history-list");
+  list.textContent = "";
+  byId("history-empty").classList.toggle("hidden", past.length > 0);
+  const words = { completed: "Completed", cancelled: "Cancelled", expired: "Expired (no driver)" };
+
+  past.forEach((r) => {
+    const d = r.data;
+    const item = document.createElement("div");
+    item.className = "history-item";
+    const when = new Date(rideMillis(d)).toLocaleString([], {
+      month: "short", day: "numeric", hour: "numeric", minute: "2-digit"
+    });
+    const head = document.createElement("p");
+    head.className = "ride-line";
+    const strong = document.createElement("strong");
+    strong.textContent = when + " • " + (words[d.status] || d.status);
+    head.appendChild(strong);
+    item.appendChild(head);
+    historyLine(item, "From:", placeText(d.pickup, "Pin A on the map"));
+    historyLine(item, "To:", placeText(d.dropoff, "Pin B on the map"));
+    if (d.fare !== null && d.fare !== undefined) historyLine(item, "Fare:", "₱" + d.fare + " (cash)");
+    if (d.driverName) historyLine(item, "Driver:", d.driverName + " • " + d.vehicleType + " • " + d.plateNumber);
+    list.appendChild(item);
+  });
+}
+
+// Deletes old finished rides (and their private records) in small batches.
+async function tidyUp(old) {
+  try {
+    for (let i = 0; i < old.length; i += 200) {
+      const batch = writeBatch(db);
+      old.slice(i, i + 200).forEach((r) => {
+        batch.delete(doc(db, "rides", r.id, "private", "student"));
+        batch.delete(doc(db, "rides", r.id));
+      });
+      await batch.commit();
+    }
+  } catch (error) {
+    // Not allowed yet (for example a wrong phone clock): the rides stay hidden and it is tried again next time.
+    console.warn("Tidy-up skipped:", error.code || error);
+  }
+}
+
+function startHistory() {
+  if (historyStarted) return;
+  historyStarted = true;
+  onSnapshot(
+    query(collection(db, "rides"), where("studentId", "==", me.user.uid)),
+    (snapshot) => {
+      const now = Date.now();
+      const finished = snapshot.docs
+        .map((d) => ({ id: d.id, data: d.data() }))
+        .filter((r) => FINISHED.includes(r.data.status));
+      const isOld = (r) => r.data.deleteAfter && r.data.deleteAfter.toDate().getTime() <= now;
+      const recent = finished.filter((r) => !isOld(r)).sort((a, b) => rideMillis(b.data) - rideMillis(a.data));
+      renderHistory(recent);
+      const old = finished.filter(isOld);
+      if (old.length > 0 && !tidied) {
+        tidied = true; // once per page load
+        tidyUp(old);
+      }
+    },
+    () => { /* History is an extra: the rest of the page still works. */ }
+  );
+}
+
 // ---------- Start ----------
 
 byId("signout").addEventListener("click", () => logOut());
@@ -519,5 +612,6 @@ requireRole("student")
     byId("hello").textContent = session.profile.name;
     startWatchingMe();
     await showCurrentState();
+    startHistory();
   })
   .catch(() => say("Couldn’t load your account. Please check your internet and refresh."));

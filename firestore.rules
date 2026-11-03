@@ -171,6 +171,13 @@ service cloud.firestore {
         && request.resource.data.status == 'completed'
         && request.resource.data.completedAt == request.time;
 
+      // Tidy-up: the student can delete his own finished ride once its 30 days are
+      // over (deleteAfter has passed). Only the student deletes, so his name and
+      // contact number in the private record go away together with the ride.
+      allow delete: if isSelf(resource.data.studentId)
+        && resource.data.status in ['completed', 'cancelled', 'expired']
+        && resource.data.deleteAfter <= request.time;
+
       // The student's name and contact number live in a small private record next
       // to the ride, so drivers cannot see them before accepting.
       match /private/{docId} {
@@ -185,6 +192,11 @@ service cloud.firestore {
           && request.resource.data.keys().hasAll(['name', 'contactNumber'])
           && request.resource.data.name == get(/databases/$(database)/documents/users/$(request.auth.uid)).data.name
           && request.resource.data.contactNumber == get(/databases/$(database)/documents/users/$(request.auth.uid)).data.contactNumber;
+        // Tidy-up: deleted by the student after the ride's 30 days are over.
+        allow delete: if docId == 'student'
+          && isSelf(get(/databases/$(database)/documents/rides/$(rideId)).data.studentId)
+          && get(/databases/$(database)/documents/rides/$(rideId)).data.status in ['completed', 'cancelled', 'expired']
+          && get(/databases/$(database)/documents/rides/$(rideId)).data.deleteAfter <= request.time;
       }
     }
 
