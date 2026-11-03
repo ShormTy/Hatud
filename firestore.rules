@@ -88,7 +88,12 @@ service cloud.firestore {
     // request at a time. Drivers will be able to read open requests in the
     // next stage.
     match /rides/{rideId} {
-      allow read: if isSelf(resource.data.studentId);
+      // A student reads his own rides. An approved driver can read rides that
+      // are still open ("requested"); his query must ask for status == "requested".
+      // Expired-but-unclosed requests are hidden by the driver's page, not by the rules
+      // (rules cannot compare a query against the phone's clock).
+      allow read: if isSelf(resource.data.studentId)
+        || (resource.data.status == 'requested' && isApprovedDriver());
       allow create: if isActiveStudent()
         && isNewRide(request.resource.data)
         && existsAfter(/databases/$(database)/documents/locks/$(request.auth.uid))
@@ -117,6 +122,14 @@ service cloud.firestore {
       allow delete: if isSelf(uid)
         && get(/databases/$(database)/documents/rides/$(resource.data.rideId)).data.status == 'requested'
         && getAfter(/databases/$(database)/documents/rides/$(resource.data.rideId)).data.status in ['cancelled', 'expired'];
+    }
+
+    // A signed-in driver who is not blocked and whom the owner has approved.
+    function isApprovedDriver() {
+      return request.auth != null
+        && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'driver'
+        && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.blocked == false
+        && get(/databases/$(database)/documents/drivers/$(request.auth.uid)).data.approvalStatus == 'approved';
     }
 
     function isActiveStudent() {

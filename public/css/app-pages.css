@@ -66,3 +66,13 @@ input[type="datetime-local"] { min-height: 46px; }
 .panel-title { margin: 0 0 8px; font-size: 18px; font-weight: 600; }
 .ride-line { margin: 6px 0; font-size: 15px; }
 .ride-line strong { color: var(--muted); font-weight: 600; }
+
+/* Driver: list of open requests */
+.request-card {
+  margin: 0 0 12px;
+  padding: 12px 14px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: var(--card);
+}
+.request-card.selected { border-color: var(--brand); }

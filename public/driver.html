@@ -4,6 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Hatud: Driver</title>
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css">
   <link rel="stylesheet" href="css/app.css">
   <link rel="stylesheet" href="css/app-pages.css">
 </head>
@@ -19,6 +20,17 @@
     <p class="status" id="status">Loading…</p>
   </section>
 
+  <!-- Shown only to approved drivers -->
+  <div id="open-area" class="hidden">
+    <div id="map" role="application" aria-label="Map of the selected request"></div>
+    <section class="panel">
+      <h2 class="panel-title">Open requests</h2>
+      <p class="hint" id="empty">No open requests right now. New ones appear here by themselves.</p>
+      <div id="requests"></div>
+    </section>
+  </div>
+
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
   <script type="module" src="js/driver.js"></script>
 </body>
 </html>
