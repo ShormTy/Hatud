@@ -1,0 +1,33 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="robots" content="noindex">
+  <title>Hatud: Admin</title>
+  <link rel="stylesheet" href="css/app.css">
+  <link rel="stylesheet" href="css/app-pages.css">
+  <style>
+    .panel { max-width: 760px; }
+    .tabs { margin: 12px 0; }
+    .history-item button { width: auto; margin-right: 8px; }
+  </style>
+</head>
+<body class="app-page">
+  <header class="topbar">
+    <strong>Hatud admin</strong>
+    <span id="hello"></span>
+    <button class="link-button" id="signout" type="button">Sign out</button>
+  </header>
+
+  <section class="panel">
+    <div class="tabs" id="tabs"></div>
+    <p class="status" id="status">Loading…</p>
+    <input id="search" class="hidden" type="search" placeholder="Search name, phone or ID">
+    <div id="list"></div>
+    <button class="secondary" id="refresh" type="button">Refresh</button>
+  </section>
+
+  <script type="module" src="js/admin.js"></script>
+</body>
+</html>

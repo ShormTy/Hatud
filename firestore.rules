@@ -28,12 +28,28 @@ service cloud.firestore {
       allow read, write: if false;
     }
 
+    // ---- admins: the owner's own login ----
+    // The owner makes the document admins/{uid} by hand in the Firebase console
+    // (the console ignores these rules). The app can never create or change it.
+    match /admins/{uid} {
+      allow read: if isSelf(uid);
+    }
+
+    function isAdmin() {
+      return request.auth != null
+        && exists(/databases/$(database)/documents/admins/$(request.auth.uid));
+    }
+
     // ---- users: one profile per person, readable only by that person ----
     match /users/{uid} {
-      allow read: if isSelf(uid);
+      allow read: if isSelf(uid) || isAdmin();
       allow create: if isSelf(uid)
         && (isNewStudent(request.resource.data) || isNewDriver(request.resource.data));
-      // No updates or deletes from the app for now.
+      // Only an admin can change a profile, and only the blocked flag.
+      allow update: if isAdmin()
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['blocked'])
+        && request.resource.data.blocked is bool;
+      // No other updates or deletes from the app.
     }
 
     function isNewStudent(d) {
@@ -65,7 +81,7 @@ service cloud.firestore {
     // batch as his users record. The owner switches approvalStatus to
     // "approved" in the Firebase console (the console ignores these rules).
     match /drivers/{uid} {
-      allow read: if isSelf(uid);
+      allow read: if isSelf(uid) || isAdmin();
       allow create: if isSelf(uid)
         && isNewDriverRecord(request.resource.data)
         && getAfter(/databases/$(database)/documents/users/$(uid)).data.role == 'driver';
@@ -79,6 +95,10 @@ service cloud.firestore {
         && request.resource.data.approvalStatus == 'pending'
         && isText(request.resource.data.vehicleType, 30)
         && isText(request.resource.data.plateNumber, 12);
+      // An admin can switch approvalStatus (and nothing else) between approved and pending.
+      allow update: if isAdmin()
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['approvalStatus'])
+        && request.resource.data.approvalStatus in ['approved', 'pending'];
       // No deletes from the app.
     }
 
@@ -286,7 +306,12 @@ service cloud.firestore {
     // reports; the owner reads all of them in the Firebase console, marks them
     // reviewed, and can block an account there (users/{uid}.blocked = true).
     match /reports/{reportId} {
-      allow read: if isSelf(resource.data.reporterId);
+      allow read: if isSelf(resource.data.reporterId) || isAdmin();
+      // An admin can mark a report new or reviewed, and delete it when it is no longer needed.
+      allow update: if isAdmin()
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status'])
+        && request.resource.data.status in ['new', 'reviewed'];
+      allow delete: if isAdmin();
       allow create: if request.auth != null
         && request.resource.data.rideId is string
         && reportId == request.resource.data.rideId + '_' + request.auth.uid

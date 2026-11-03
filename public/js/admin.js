@@ -1,0 +1,214 @@
+// Admin page for the owner: approve drivers, block accounts, read reports.
+// Anyone can open this page, but the rules show data only to a signed-in admin
+// (a document at admins/{uid} that the owner makes by hand in the Firebase console).
+import { auth, db } from "./firebase.js";
+import { onAuthStateChanged, signOut } from "https://www.gstatic.com/firebasejs/12.3.0/firebase-auth.js";
+import {
+  doc,
+  getDoc,
+  getDocs,
+  collection,
+  updateDoc,
+  deleteDoc
+} from "https://www.gstatic.com/firebasejs/12.3.0/firebase-firestore.js";
+
+const byId = (id) => document.getElementById(id);
+const REASONS = {
+  unreasonable_fare: "Unreasonable fare",
+  unsafe_or_rude: "Unsafe or rude",
+  no_show: "Did not show up",
+  wrong_vehicle: "Wrong vehicle or plate",
+  refused_to_pay: "Refused to pay",
+  other: "Something else"
+};
+
+let users = new Map();
+let drivers = new Map();
+let reports = [];
+let tab = "drivers";
+
+// Everything people typed is shown with textContent, never as HTML.
+function el(tag, text, cls) {
+  const e = document.createElement(tag);
+  if (text !== null && text !== undefined) e.textContent = text;
+  if (cls) e.className = cls;
+  return e;
+}
+
+function line(label, value) {
+  const p = el("p", null, "ride-line");
+  p.append(el("strong", label + " "), document.createTextNode(value || "-"));
+  return p;
+}
+
+function button(text, cls, onClick) {
+  const b = el("button", text, cls);
+  b.type = "button";
+  b.onclick = onClick;
+  return b;
+}
+
+const when = (t) => (t && t.toDate ? t.toDate().toLocaleString() : "");
+
+function who(uid) {
+  const u = users.get(uid);
+  return u ? u.name + " (" + u.role + ", " + u.contactNumber + ")" : uid;
+}
+
+function say(text) {
+  const s = byId("status");
+  s.textContent = text;
+  s.classList.toggle("hidden", !text);
+}
+
+// Asks first (if a question is given), saves, then redraws the page.
+async function change(task, ask) {
+  if (ask && !window.confirm(ask)) return;
+  try {
+    await task();
+    say("");
+  } catch (error) {
+    say("Could not save (" + (error.code || "error") + "). Press Refresh and try again.");
+  }
+  render();
+}
+
+const setBlocked = (uid, value) => change(async () => {
+  await updateDoc(doc(db, "users", uid), { blocked: value });
+  users.get(uid).blocked = value;
+}, (value ? "Block " : "Unblock ") + who(uid) + "?");
+
+const setApproval = (uid, status) => change(async () => {
+  await updateDoc(doc(db, "drivers", uid), { approvalStatus: status });
+  drivers.get(uid).approvalStatus = status;
+}, status === "approved"
+  ? "Approve " + who(uid) + "? Only do this after you checked the papers and the vehicle in person."
+  : "Set " + who(uid) + " back to pending? They will not see ride requests until you approve again.");
+
+const setReportStatus = (r, status) => change(async () => {
+  await updateDoc(doc(db, "reports", r.id), { status });
+  r.status = status;
+});
+
+const removeReport = (r) => change(async () => {
+  await deleteDoc(doc(db, "reports", r.id));
+  reports = reports.filter((x) => x.id !== r.id);
+}, "Delete this report for good?");
+
+function blockButton(uid, suffix) {
+  const u = users.get(uid);
+  if (!u) return null;
+  return button((u.blocked ? "Unblock" : "Block") + (suffix || ""), "secondary", () => setBlocked(uid, !u.blocked));
+}
+
+function driverCard(uid, d) {
+  const u = users.get(uid) || {};
+  const card = el("div", null, "history-item");
+  card.append(el("p", u.name || uid, "panel-title"));
+  card.append(line("Status:", d.approvalStatus + (u.blocked ? " (BLOCKED)" : "")));
+  card.append(line("Vehicle:", d.vehicleType + ", plate " + d.plateNumber));
+  card.append(line("Contact:", d.contactNumber));
+  card.append(line("Signed up:", when(u.createdAt)));
+  card.append(d.approvalStatus === "approved"
+    ? button("Set to pending", "secondary", () => setApproval(uid, "pending"))
+    : button("Approve", "primary", () => setApproval(uid, "approved")));
+  const b = blockButton(uid);
+  if (b) card.append(b);
+  return card;
+}
+
+function personCard(uid, u) {
+  const card = el("div", null, "history-item");
+  card.append(el("p", u.name, "panel-title"));
+  card.append(line("Role:", u.role + (u.blocked ? " (BLOCKED)" : "")));
+  if (u.school) card.append(line("School:", u.school));
+  card.append(line("Contact:", u.contactNumber));
+  card.append(line("Signed up:", when(u.createdAt)));
+  card.append(line("ID:", uid));
+  card.append(blockButton(uid));
+  return card;
+}
+
+function reportCard(r) {
+  const card = el("div", null, "history-item");
+  card.append(el("p", (REASONS[r.reason] || r.reason) + (r.status === "new" ? " (NEW)" : " (reviewed)"), "panel-title"));
+  if (r.details) card.append(line("Details:", r.details));
+  card.append(line("From:", who(r.reporterId)));
+  card.append(line("About:", who(r.reportedId)));
+  card.append(line("Sent:", when(r.createdAt)));
+  card.append(button(r.status === "new" ? "Mark reviewed" : "Mark new", "secondary",
+    () => setReportStatus(r, r.status === "new" ? "reviewed" : "new")));
+  const b = blockButton(r.reportedId, " the reported person");
+  if (b) card.append(b);
+  card.append(button("Delete report", "secondary", () => removeReport(r)));
+  return card;
+}
+
+function render() {
+  const pending = [...drivers.values()].filter((d) => d.approvalStatus !== "approved").length;
+  const fresh = reports.filter((r) => r.status === "new").length;
+  const names = {
+    drivers: "Drivers (" + pending + " pending)",
+    people: "People (" + users.size + ")",
+    reports: "Reports (" + fresh + " new)"
+  };
+  const tabs = byId("tabs");
+  tabs.replaceChildren();
+  for (const key of Object.keys(names)) {
+    const b = button(names[key], null, () => { tab = key; render(); });
+    b.setAttribute("aria-selected", String(tab === key));
+    tabs.append(b);
+  }
+  byId("search").classList.toggle("hidden", tab !== "people");
+
+  const cards = [];
+  if (tab === "drivers") {
+    // Waiting drivers first.
+    [...drivers].sort(([, a], [, b]) => (a.approvalStatus === "approved") - (b.approvalStatus === "approved"))
+      .forEach(([uid, d]) => cards.push(driverCard(uid, d)));
+  } else if (tab === "people") {
+    const q = byId("search").value.trim().toLowerCase();
+    [...users].filter(([uid, u]) => !q || (u.name + " " + u.contactNumber + " " + uid).toLowerCase().includes(q))
+      .sort(([, a], [, b]) => (a.name || "").localeCompare(b.name || ""))
+      .forEach(([uid, u]) => cards.push(personCard(uid, u)));
+  } else {
+    // New reports first, then the newest.
+    [...reports].sort((a, b) => (b.status === "new") - (a.status === "new")
+      || (b.createdAt?.toMillis?.() || 0) - (a.createdAt?.toMillis?.() || 0))
+      .forEach((r) => cards.push(reportCard(r)));
+  }
+  const list = byId("list");
+  list.replaceChildren(...(cards.length ? cards : [el("p", "Nothing here.", "hint")]));
+}
+
+async function load() {
+  say("Loading…");
+  try {
+    const [u, d, r] = await Promise.all(["users", "drivers", "reports"].map((name) => getDocs(collection(db, name))));
+    users = new Map(u.docs.map((x) => [x.id, x.data()]));
+    drivers = new Map(d.docs.map((x) => [x.id, x.data()]));
+    reports = r.docs.map((x) => ({ id: x.id, ...x.data() }));
+    say("");
+  } catch (error) {
+    say("Could not load (" + (error.code || "error") + "). Check your internet and press Refresh.");
+  }
+  render();
+}
+
+byId("signout").onclick = () => signOut(auth).then(() => location.replace("index.html"));
+byId("refresh").onclick = load;
+byId("search").oninput = render;
+
+const stop = onAuthStateChanged(auth, async (user) => {
+  stop();
+  if (!user) { location.replace("index.html"); return; }
+  try {
+    const admin = await getDoc(doc(db, "admins", user.uid));
+    if (!admin.exists()) { location.replace("index.html"); return; }
+  } catch (error) {
+    say("Could not check your account. Refresh the page.");
+    return;
+  }
+  byId("hello").textContent = user.email;
+  load();
+});
