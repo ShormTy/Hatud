@@ -259,22 +259,54 @@ form.addEventListener("submit", async (event) => {
 
 // "Forgot password?": Firebase sends a free reset email. The same answer is shown whether or
 // not an account exists, so nobody can use this button to find out who has an account.
-byId("forgot").addEventListener("click", async () => {
+const forgotButton = byId("forgot");
+
+function resetForgotButton() {
+  forgotButton.disabled = false;
+  forgotButton.style.opacity = "";
+  forgotButton.textContent = "Forgot password?";
+}
+
+// After a request the button waits 30 seconds before it can be tapped again. This shows that the
+// tap worked and also protects the free limit of reset emails.
+function waitForgotButton() {
+  let left = 30;
+  forgotButton.disabled = true;
+  forgotButton.style.opacity = "0.6";
+  forgotButton.textContent = "Request sent. Try again in " + left + "s";
+  const timer = setInterval(() => {
+    left -= 1;
+    if (left <= 0) {
+      clearInterval(timer);
+      resetForgotButton();
+    } else {
+      forgotButton.textContent = "Request sent. Try again in " + left + "s";
+    }
+  }, 1000);
+}
+
+forgotButton.addEventListener("click", async () => {
   showMessage("");
   const email = byId("email").value.trim();
   if (!email) {
     showMessage("Type your email above first, then tap Forgot password?");
     return;
   }
+  forgotButton.disabled = true;
+  forgotButton.style.opacity = "0.6";
+  forgotButton.textContent = "Sending…";
   try {
     await sendPasswordResetEmail(auth, email);
   } catch (error) {
     if (error.code !== "auth/user-not-found") {
+      resetForgotButton();
       showMessage(friendlyError(error));
       return;
     }
   }
-  showMessage("If that email has an account, we sent a link to reset the password. Check your inbox and the spam folder.");
+  // The same answer for every email, so nobody can find out who has an account.
+  showMessage("Reset link requested for " + email + ". Check your inbox and the spam folder; it can take a few minutes.");
+  waitForgotButton();
 });
 
 signOutButton.addEventListener("click", async () => {
