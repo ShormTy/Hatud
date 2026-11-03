@@ -11,7 +11,7 @@
   --error-text: #9b1c1c;
 }
 @media (prefers-color-scheme: dark) {
-  :root {
+  :root:not([data-theme="light"]) {
     --bg: #11171d;
     --card: #1b232c;
     --text: #eef2f6;
@@ -22,6 +22,31 @@
     --error-bg: #3a1c1c;
     --error-text: #ffb4b4;
   }
+}
+:root[data-theme="dark"] {
+  --bg: #11171d;
+  --card: #1b232c;
+  --text: #eef2f6;
+  --muted: #9aa7b6;
+  --line: #33404d;
+  --brand: #2dd4bf;
+  --brand-text: #08201d;
+  --error-bg: #3a1c1c;
+  --error-text: #ffb4b4;
+}
+.theme-btn { min-width: 40px; text-align: center; line-height: 1; }
+.theme-fixed {
+  position: fixed;
+  top: 10px;
+  right: 10px;
+  z-index: 1000;
+  padding: 8px 12px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: var(--card);
+  color: var(--text);
+  font-size: 16px;
+  cursor: pointer;
 }
 * { box-sizing: border-box; }
 html, body { margin: 0; }
