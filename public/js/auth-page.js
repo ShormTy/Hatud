@@ -6,7 +6,8 @@ import {
   createUserWithEmailAndPassword,
   signInWithEmailAndPassword,
   signOut,
-  deleteUser
+  deleteUser,
+  sendPasswordResetEmail
 } from "https://www.gstatic.com/firebasejs/12.3.0/firebase-auth.js";
 import {
   doc,
@@ -63,6 +64,7 @@ function updateForm() {
   });
   submitButton.textContent = signup ? "Create account" : "Log in";
   byId("password").autocomplete = signup ? "new-password" : "current-password";
+  byId("forgot").classList.toggle("hidden", signup);
 }
 
 function setMode(newMode) {
@@ -237,6 +239,10 @@ form.addEventListener("submit", async (event) => {
         showMessage(result.error);
         return;
       }
+      if (byId("email2").value.trim().toLowerCase() !== email.toLowerCase()) {
+        showMessage("The two emails are not the same. Please check them.");
+        return;
+      }
       await signUp(email, password, result.data);
     } else {
       await signInWithEmailAndPassword(auth, email, password);
@@ -249,6 +255,26 @@ form.addEventListener("submit", async (event) => {
     submitButton.disabled = false;
     render(auth.currentUser);
   }
+});
+
+// "Forgot password?": Firebase sends a free reset email. The same answer is shown whether or
+// not an account exists, so nobody can use this button to find out who has an account.
+byId("forgot").addEventListener("click", async () => {
+  showMessage("");
+  const email = byId("email").value.trim();
+  if (!email) {
+    showMessage("Type your email above first, then tap Forgot password?");
+    return;
+  }
+  try {
+    await sendPasswordResetEmail(auth, email);
+  } catch (error) {
+    if (error.code !== "auth/user-not-found") {
+      showMessage(friendlyError(error));
+      return;
+    }
+  }
+  showMessage("If that email has an account, we sent a link to reset the password. Check your inbox and the spam folder.");
 });
 
 signOutButton.addEventListener("click", async () => {
