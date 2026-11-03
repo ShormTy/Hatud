@@ -43,7 +43,9 @@ service cloud.firestore {
     // ---- users: one profile per person, readable only by that person ----
     match /users/{uid} {
       allow read: if isSelf(uid) || isAdmin();
+      // Not while the owner has a removedUsers note for this person (W6).
       allow create: if isSelf(uid)
+        && !exists(/databases/$(database)/documents/removedUsers/$(uid))
         && (isNewStudent(request.resource.data) || isNewDriver(request.resource.data));
       // Only an admin can change a profile, and only the blocked flag.
       allow update: if isAdmin()
