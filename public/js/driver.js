@@ -221,6 +221,142 @@ function renderList() {
   });
 }
 
+// ---------- Driver's own live map (his position stays on his phone) ----------
+// His GPS position is drawn on his own map only; nothing about it is saved to the
+// database. To draw road routes, the start and end points of each route are sent
+// to OpenStreetMap's free public routing server (OSRM), which is why route
+// requests are kept few.
+
+const OSRM = "https://router.project-osrm.org/route/v1/driving/";
+let watchId = null;
+let youMarker = null;
+let legs = { toPickup: null, pickupToDrop: null };
+let tracked = null;           // the ride being followed
+let lastRouteFrom = null;
+let lastRouteAt = 0;
+let legInfo = { toPickup: "", pickupToDrop: "" };
+let gpsFirstFix = true;
+
+async function fetchRoute(from, to) {
+  const url = OSRM + from.lng + "," + from.lat + ";" + to.lng + "," + to.lat
+    + "?overview=full&geometries=geojson";
+  const response = await fetch(url);
+  if (!response.ok) throw new Error("route " + response.status);
+  const json = await response.json();
+  if (json.code !== "Ok" || !json.routes.length) throw new Error("no route");
+  const route = json.routes[0];
+  return {
+    points: route.geometry.coordinates.map(([lng, lat]) => [lat, lng]),
+    km: route.distance / 1000,
+    minutes: route.duration / 60
+  };
+}
+
+function setLeg(key, points, style) {
+  if (legs[key]) map.removeLayer(legs[key]);
+  legs[key] = points ? L.polyline(points, style).addTo(map) : null;
+}
+
+function legText(label, km, minutes) {
+  return label + ": " + km.toFixed(1) + " km, about " + Math.max(1, Math.round(minutes)) + " min";
+}
+
+function showRouteInfo() {
+  const parts = [legInfo.toPickup, legInfo.pickupToDrop].filter(Boolean);
+  byId("route-info").textContent = parts.join("  •  ");
+  byId("route-info").classList.toggle("hidden", parts.length === 0);
+}
+
+// Draws one leg of the trip. If the road route can't be loaded, it falls back
+// to a dashed straight line so the driver still sees the direction.
+async function drawLeg(key, from, to, style, label, ride) {
+  try {
+    const route = await fetchRoute(from, to);
+    if (tracked !== ride) return;
+    setLeg(key, route.points, style);
+    legInfo[key] = legText(label, route.km, route.minutes);
+  } catch (error) {
+    if (tracked !== ride) return;
+    setLeg(key, [from, to], Object.assign({}, style, { dashArray: "6 8" }));
+    legInfo[key] = label + ": road route unavailable (straight line shown)";
+  }
+  showRouteInfo();
+}
+
+function onPosition(position, ride) {
+  if (tracked !== ride) return;
+  const here = L.latLng(position.coords.latitude, position.coords.longitude);
+  if (!youMarker) {
+    youMarker = L.circleMarker(here, {
+      radius: 9, color: "#ffffff", weight: 3, fillColor: "#2563eb", fillOpacity: 1
+    }).addTo(map);
+  } else {
+    youMarker.setLatLng(here);
+  }
+
+  const pickup = L.latLng(ride.pickup.lat, ride.pickup.lng);
+  const dropoff = L.latLng(ride.dropoff.lat, ride.dropoff.lng);
+
+  if (gpsFirstFix) {
+    gpsFirstFix = false;
+    map.fitBounds(L.latLngBounds([here, pickup, dropoff]), { padding: [40, 40], maxZoom: 17 });
+  }
+
+  // Near the pickup point: the first leg is done, only pickup to drop-off remains.
+  if (map.distance(here, pickup) < 80) {
+    setLeg("toPickup", null);
+    legInfo.toPickup = "You are at the pickup point";
+    showRouteInfo();
+    return;
+  }
+
+  // Redraw the way to the pickup only after he has moved a good way, and not too often.
+  const now = Date.now();
+  const moved = !lastRouteFrom || map.distance(lastRouteFrom, here) > 150;
+  if (moved && now - lastRouteAt > 20000) {
+    lastRouteFrom = here;
+    lastRouteAt = now;
+    drawLeg("toPickup", here, pickup, { color: "#2563eb", weight: 5, opacity: 0.85 }, "To pickup", ride);
+  }
+}
+
+function startTracking(ride) {
+  stopTracking();
+  tracked = ride;
+  const pickup = L.latLng(ride.pickup.lat, ride.pickup.lng);
+  const dropoff = L.latLng(ride.dropoff.lat, ride.dropoff.lng);
+  // Pickup to drop-off is drawn once.
+  drawLeg("pickupToDrop", pickup, dropoff, { color: "#c2410c", weight: 5, opacity: 0.85 }, "Pickup to drop-off", ride);
+
+  if (!navigator.geolocation) {
+    legInfo.toPickup = "This phone can’t share its position, so only the trip route is shown.";
+    showRouteInfo();
+    return;
+  }
+  watchId = navigator.geolocation.watchPosition(
+    (position) => onPosition(position, ride),
+    () => {
+      legInfo.toPickup = "Allow location access to see your position and the way to the pickup.";
+      showRouteInfo();
+    },
+    { enableHighAccuracy: true, maximumAge: 5000, timeout: 20000 }
+  );
+}
+
+function stopTracking() {
+  if (watchId !== null) navigator.geolocation.clearWatch(watchId);
+  watchId = null;
+  tracked = null;
+  if (youMarker) { map.removeLayer(youMarker); youMarker = null; }
+  setLeg("toPickup", null);
+  setLeg("pickupToDrop", null);
+  lastRouteFrom = null;
+  lastRouteAt = 0;
+  legInfo = { toPickup: "", pickupToDrop: "" };
+  gpsFirstFix = true;
+  showRouteInfo();
+}
+
 // ---------- Current ride ----------
 
 // Moves the current ride forward: accepted -> on the way -> completed.
@@ -265,6 +401,7 @@ async function renderCurrent() {
 
   if (!active) {
     currentId = null;
+    stopTracking();
     return;
   }
   // The status line and the button follow the ride's status every time.
@@ -289,6 +426,7 @@ async function renderCurrent() {
   byId("current-contact").textContent = "";
   byId("current-contact").removeAttribute("href");
   showOnMap(data);
+  startTracking(data);
 
   try {
     const snap = await getDoc(doc(db, "rides", active.id, "private", "student"));
