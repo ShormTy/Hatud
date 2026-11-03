@@ -562,8 +562,15 @@ async function renderCurrent() {
   byId("open-area-list").classList.toggle("hidden", !!active);
 
   if (!active) {
+    const hadRide = currentId !== null;
     currentId = null;
     stopTracking();
+    if (hadRide) {
+      // The ride ended (completed or cancelled): clear its A and B pins and go back to him.
+      clearPins();
+      selectedId = null;
+      if (driverPos) map.setView(driverPos, 15);
+    }
     renderList(); // the numbered request pins come back
     return;
   }
