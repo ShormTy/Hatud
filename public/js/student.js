@@ -414,6 +414,37 @@ async function showCurrentState() {
   );
 }
 
+// ---------- The student's own blue dot ----------
+// Drawn on his own map only. His position stays on his phone: it is never saved,
+// and no driver can see it. The only places he shares are the pins he chooses.
+
+let youMarker = null;
+let centeredOnYou = false;
+
+function startWatchingMe() {
+  if (!navigator.geolocation) return;
+  navigator.geolocation.watchPosition(
+    (position) => {
+      const here = L.latLng(position.coords.latitude, position.coords.longitude);
+      if (!youMarker) {
+        youMarker = L.circleMarker(here, {
+          radius: 9, color: "#ffffff", weight: 3, fillColor: "#2563eb", fillOpacity: 1,
+          interactive: false // taps near the dot still set pins on the map
+        }).addTo(map).bindTooltip("You");
+      } else {
+        youMarker.setLatLng(here);
+      }
+      // Centre the map on him once, only if he has not started setting pins.
+      if (!centeredOnYou && planning && !pickup && !dropoff) {
+        centeredOnYou = true;
+        map.setView(here, 15);
+      }
+    },
+    () => { /* Location not allowed: the map still works without the dot. */ },
+    { enableHighAccuracy: false, maximumAge: 15000, timeout: 20000 }
+  );
+}
+
 // ---------- Start ----------
 
 byId("signout").addEventListener("click", () => logOut());
@@ -425,6 +456,7 @@ requireRole("student")
   .then(async (session) => {
     me = session;
     byId("hello").textContent = session.profile.name;
+    startWatchingMe();
     await showCurrentState();
   })
   .catch(() => say("Couldn’t load your account. Please check your internet and refresh."));
