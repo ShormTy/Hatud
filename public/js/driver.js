@@ -5,6 +5,7 @@ import { db } from "./firebase.js";
 import { makeCaps } from "./caps.js";
 import { addReportControls, loadReported } from "./report.js";
 import { confirmBox } from "./dialog.js";
+import { SUPPORT_EMAIL } from "./support.js";
 import {
   doc,
   getDoc,
@@ -44,6 +45,7 @@ let currentId = null;    // the ride shown in "Your current ride"
 const typedFares = {};   // what the driver typed per request, kept while the list redraws
 
 byId("signout").addEventListener("click", () => logOut());
+byId("show-all").addEventListener("click", () => showAllRequests());
 
 function say(text) {
   note.textContent = text;
@@ -112,14 +114,16 @@ function numberIcon(number) {
 }
 
 function updateRequestPins(open) {
-  const wanted = new Set(currentId ? [] : open.map((r) => r.id));
+  // The numbered pins show only while no request is being inspected and no ride is under way.
+  const showPins = !currentId && !selectedId;
+  const wanted = new Set(showPins ? open.map((r) => r.id) : []);
   Object.keys(requestPins).forEach((id) => {
     if (!wanted.has(id) || id === selectedId) {
       map.removeLayer(requestPins[id]);
       delete requestPins[id];
     }
   });
-  if (currentId) return;
+  if (!showPins) return;
   open.forEach(({ id, data }, index) => {
     if (id === selectedId) return; // the selected one is drawn with its A and B pins
     if (requestPins[id]) {
@@ -134,6 +138,19 @@ function updateRequestPins(open) {
         });
     }
   });
+}
+
+// Leaves the inspected request and brings the numbered pins of all open requests back.
+function showAllRequests() {
+  selectedId = null;
+  clearPins();
+  renderList();
+  if (driverPos) {
+    map.setView(driverPos, 15);
+  } else {
+    const points = Object.values(requestPins).map((pin) => pin.getLatLng());
+    if (points.length > 0) map.fitBounds(L.latLngBounds(points), { padding: [40, 40], maxZoom: 16 });
+  }
 }
 
 // ---------- Helpers ----------
@@ -159,8 +176,9 @@ function line(label, text) {
 function friendlyError(error) {
   switch (error.code) {
     case "taken":
-    case "permission-denied":
       return "Sorry, this request was already taken, cancelled, or has run out of time.";
+    case "permission-denied":
+      return "That was refused. The request may have changed, or your account may have changed. Please refresh the page and try again.";
     case "unavailable":
     case "network-request-failed":
       return "No internet connection. Please try again.";
@@ -214,7 +232,9 @@ async function accept(id, fareText) {
     delete typedFares[id];
     // The live listener below now shows "Your current ride".
   } catch (error) {
-    say(friendlyError(error));
+    say(error.code === "permission-denied"
+      ? "Sorry, this request was already taken, cancelled, or has run out of time. If this keeps happening, refresh the page, or write to " + SUPPORT_EMAIL + " to ask if your account is still approved."
+      : friendlyError(error));
   }
 }
 
@@ -266,6 +286,8 @@ function renderList() {
     selectedId = null;
     if (!currentId) clearPins();
   }
+
+  byId("show-all-panel").classList.toggle("hidden", !selectedId || Boolean(currentId));
 
   open.forEach(({ id, data, away, road }) => {
     const card = document.createElement("article");
@@ -977,6 +999,8 @@ requireRole("driver")
       await loadReported(session.user.uid);
       startMap();
       startListening();
+    } else if (session.profile.blocked === true) {
+      status.textContent = "Your account is blocked. Please contact the owner at " + SUPPORT_EMAIL + ".";
     } else {
       status.textContent = "Waiting for approval. The owner will meet you to check your papers.";
     }

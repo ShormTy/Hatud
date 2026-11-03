@@ -4,6 +4,7 @@ import { requireRole, logOut } from "./session.js";
 import { db } from "./firebase.js";
 import { addReportControls, loadReported } from "./report.js";
 import { confirmBox } from "./dialog.js";
+import { SUPPORT_EMAIL } from "./support.js";
 import {
   doc,
   collection,
@@ -42,6 +43,7 @@ let stopWatching = null; // stops the live listening on the open request
 let lastStatus = null;   // the status of the open request the last time the page saw it
 let cancelTimer = null;  // shows the late-cancel button once 10 minutes have passed
 const CANCEL_AFTER_MS = 10 * 60 * 1000;
+const BLOCKED_TEXT = "Your account is blocked, so you can’t make new requests. Please contact the owner at " + SUPPORT_EMAIL + ".";
 
 function say(text) {
   note.textContent = text;
@@ -161,7 +163,9 @@ expiryInput.addEventListener("input", updateExpiryText);
 function friendlyError(error) {
   switch (error.code) {
     case "permission-denied":
-      return "The request was refused. Please check that your phone’s date and time are correct, then try again.";
+      return me && me.profile && me.profile.blocked === true
+        ? BLOCKED_TEXT
+        : "The request was refused. Please check that your phone’s date and time are correct, then try again. If it still fails, write to " + SUPPORT_EMAIL + ".";
     case "unavailable":
     case "network-request-failed":
       return "No internet connection. Please try again.";
@@ -518,6 +522,18 @@ async function showCurrentState() {
     return;
   }
 
+  if (!ride) {
+    // The request is gone (for example the owner deleted it): free the student.
+    try {
+      await deleteDoc(doc(db, "locks", me.user.uid));
+      showPlanner();
+      say("Your last request could not be found, so it was cleared. You can make a new one.");
+    } catch (error) {
+      say("We couldn’t load your open request. Please refresh, or tell the Hatud owner if this keeps happening.");
+    }
+    return;
+  }
+
   // A finished ride frees the student to make a new request.
   if (ride.status === "completed") {
     await finishCompleted();
@@ -556,7 +572,12 @@ async function showCurrentState() {
     doc(db, "rides", rideId),
     (snap) => {
       const latest = snap.data();
-      if (!latest) return;
+      if (!latest) {
+        // The request was deleted while the page was open.
+        if (stopWatching) { stopWatching(); stopWatching = null; }
+        showCurrentState();
+        return;
+      }
       if (latest.status === "requested" || latest.status === "accepted" || latest.status === "on_the_way") {
         // The ride went back to the open list: say why.
         if (lastStatus === "accepted" && latest.status === "requested") {
@@ -711,6 +732,11 @@ requireRole("student")
   .then(async (session) => {
     me = session;
     byId("hello").textContent = session.profile.name;
+    if (session.profile.blocked === true) {
+      requestButton.disabled = true;
+      requestButton.textContent = "Account blocked";
+      say(BLOCKED_TEXT);
+    }
     startWatchingMe();
     await showCurrentState();
     await loadReported(session.user.uid);

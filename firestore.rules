@@ -283,12 +283,14 @@ service cloud.firestore {
         && request.resource.data.rideId is string
         && !exists(/databases/$(database)/documents/rides/$(request.resource.data.rideId))
         && getAfter(/databases/$(database)/documents/rides/$(request.resource.data.rideId)).data.studentId == uid;
-      // The lock can go in three cases: in the same batch that cancels or expires
+      // The lock can go in four cases: when its ride no longer exists (for example the
+      // owner deleted it), so a student is never stuck; in the same batch that cancels or expires
       // the ride; after the ride is completed; or, as a safety valve, when a ride has
       // been "on the way" for more than 6 hours (for example if the driver never
       // tapped Completed), so a student is never stuck.
       allow delete: if isSelf(uid)
-        && ((get(/databases/$(database)/documents/rides/$(resource.data.rideId)).data.status in ['requested', 'accepted']
+        && (!exists(/databases/$(database)/documents/rides/$(resource.data.rideId))
+            || (get(/databases/$(database)/documents/rides/$(resource.data.rideId)).data.status in ['requested', 'accepted']
              && getAfter(/databases/$(database)/documents/rides/$(resource.data.rideId)).data.status in ['cancelled', 'expired'])
             || (get(/databases/$(database)/documents/rides/$(resource.data.rideId)).data.status == 'on_the_way'
                 && get(/databases/$(database)/documents/rides/$(resource.data.rideId)).data.startedAt <= request.time - duration.value(10, 'm')
