@@ -30,6 +30,11 @@ let myRides = [];        // rides this driver has accepted: [{ id, data }]
 let selectedId = null;
 let driverPos = null;    // the driver's own position (stays on his phone, never saved)
 let lastListPos = null;  // where the list was last sorted from
+let roadAway = {};       // road distance to each pickup: { rideId: { km, min } }
+let roadFrom = null;     // where the driver was when the road distances were fetched
+let roadAt = 0;          // when they were last fetched (or when to try again after a failure)
+let roadKey = "";        // which requests the road distances cover
+let roadBusy = false;
 let currentId = null;    // the ride shown in "Your current ride"
 const typedFares = {};   // what the driver typed per request, kept while the list redraws
 
@@ -156,13 +161,15 @@ function renderList() {
   // Hide requests that ran out of time but were not closed yet.
   const open = rides
     .filter((r) => r.data.expiresAt.toDate().getTime() > now)
-    .map((r) => ({
-      ...r,
+    .map((r) => {
       // Straight-line distance from the driver to the pickup point, in km (null if his position is unknown).
-      away: driverPos
+      const straight = driverPos
         ? driverPos.distanceTo(L.latLng(r.data.pickup.lat, r.data.pickup.lng)) / 1000
-        : null
-    }));
+        : null;
+      // Distance by road, when the routing service has answered.
+      const road = roadAway[r.id] || null;
+      return { ...r, straight, road, away: road ? road.km : straight };
+    });
 
   // Nearest pickup first when his position is known; otherwise the ones closing soonest first.
   if (driverPos) {
@@ -172,8 +179,11 @@ function renderList() {
   }
   lastListPos = driverPos;
 
+  const anyRoad = open.some((r) => r.road);
   byId("sort-hint").textContent = driverPos
-    ? "Sorted from the nearest pickup to the farthest. Distances are in a straight line, so the road is a bit longer."
+    ? (anyRoad
+        ? "Sorted from the nearest pickup to the farthest, by road."
+        : "Sorted from the nearest pickup to the farthest. Road distances are loading; until then the distance is in a straight line.")
     : "Allow location access to see how far each pickup is from you and to sort the nearest first. Until then, the ones closing soonest are on top.";
   byId("sort-hint").classList.toggle("hidden", open.length === 0 && !driverPos);
 
@@ -186,7 +196,7 @@ function renderList() {
     if (!currentId) clearPins();
   }
 
-  open.forEach(({ id, data, away }) => {
+  open.forEach(({ id, data, away, road }) => {
     const card = document.createElement("article");
     card.className = "request-card" + (id === selectedId ? " selected" : "");
 
@@ -196,7 +206,12 @@ function renderList() {
     ) / 1000;
 
     if (away !== null) {
-      card.appendChild(line("Pickup is from you:", "about " + away.toFixed(1) + " km away"));
+      card.appendChild(line(
+        "Pickup is from you:",
+        road
+          ? "about " + road.km.toFixed(1) + " km by road (about " + Math.max(1, Math.round(road.min)) + " min)"
+          : "about " + away.toFixed(1) + " km in a straight line"
+      ));
     }
     card.appendChild(line("From (A):", placeText(data.pickup, "Pin A on the map")));
     card.appendChild(line("To (B):", placeText(data.dropoff, "Pin B on the map")));
@@ -243,6 +258,51 @@ function renderList() {
 
     box.appendChild(card);
   });
+
+  maybeFetchRoadDistances(open);
+}
+
+// Asks the free public routing service (OSRM) for the road distance from the driver to
+// ALL open pickups in one request. It asks again only when a request appears or goes,
+// or the driver has moved over 150 m, and at most every 10 seconds. If it fails, the
+// list keeps working with straight-line distances and tries again after a minute.
+async function maybeFetchRoadDistances(open) {
+  if (!driverPos || roadBusy || open.length === 0) return;
+  const key = open.map((r) => r.id).sort().join(",");
+  const moved = !roadFrom || driverPos.distanceTo(roadFrom) > 150;
+  if (key === roadKey && !moved) return;
+  if (Date.now() - roadAt < 10000) return;
+
+  const batch = [...open].sort((a, b) => a.straight - b.straight).slice(0, 50);
+  roadBusy = true;
+  roadAt = Date.now();
+  const from = driverPos;
+  try {
+    const points = [from, ...batch.map((r) => L.latLng(r.data.pickup.lat, r.data.pickup.lng))];
+    const coords = points.map((p) => p.lng + "," + p.lat).join(";");
+    const response = await fetch(
+      "https://router.project-osrm.org/table/v1/driving/" + coords + "?sources=0&annotations=distance,duration"
+    );
+    if (!response.ok) throw new Error("table " + response.status);
+    const json = await response.json();
+    if (json.code !== "Ok") throw new Error("table " + json.code);
+
+    const next = {};
+    batch.forEach((r, i) => {
+      const meters = json.distances[0][i + 1];
+      const seconds = json.durations[0][i + 1];
+      if (meters !== null && seconds !== null) next[r.id] = { km: meters / 1000, min: seconds / 60 };
+    });
+    roadAway = next;
+    roadFrom = from;
+    roadKey = key;
+    const typing = document.activeElement && document.activeElement.tagName === "INPUT";
+    if (!typing) renderList();
+  } catch (error) {
+    roadAt = Date.now() + 60 * 1000; // wait a minute before trying again
+  } finally {
+    roadBusy = false;
+  }
 }
 
 // ---------- Driver's own live map (his position stays on his phone) ----------
