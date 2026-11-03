@@ -6,6 +6,7 @@ import { makeCaps } from "./caps.js";
 import { addReportControls, loadReported } from "./report.js";
 import { confirmBox } from "./dialog.js";
 import { SUPPORT_EMAIL } from "./support.js";
+import { keepScreenOn } from "./wakelock.js";
 import {
   doc,
   getDoc,
@@ -775,6 +776,7 @@ async function renderCurrent() {
     const hadRide = currentId !== null;
     currentId = null;
     stopTracking();
+    keepScreenOn(false);
     if (hadRide) {
       // The ride ended (completed or cancelled): clear its A and B pins and go back to him.
       clearPins();
@@ -784,6 +786,7 @@ async function renderCurrent() {
     renderList(); // the numbered request pins come back
     return;
   }
+  keepScreenOn(true); // the screen stays on while he has a ride
   // The status line and the buttons follow the ride's status every time.
   const underway = active.data.status === "on_the_way";
   // "I'm on the way" unlocks only when the student agreed to the fare (or the driver accepted his offer).
