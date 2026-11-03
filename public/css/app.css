@@ -1,5 +1,6 @@
 /* Hatud shared styles. Used by every page. */
 :root {
+  color-scheme: light;
   --bg: #f4f6f8;
   --card: #ffffff;
   --text: #1b2430;
@@ -12,6 +13,7 @@
 }
 @media (prefers-color-scheme: dark) {
   :root:not([data-theme="light"]) {
+    color-scheme: dark;
     --bg: #11171d;
     --card: #1b232c;
     --text: #eef2f6;
@@ -24,6 +26,7 @@
   }
 }
 :root[data-theme="dark"] {
+  color-scheme: dark;
   --bg: #11171d;
   --card: #1b232c;
   --text: #eef2f6;
@@ -35,17 +38,18 @@
   --error-text: #ffb4b4;
 }
 .theme-btn { min-width: 40px; text-align: center; line-height: 1; }
-.theme-fixed {
-  position: fixed;
-  top: 10px;
-  right: 10px;
-  z-index: 1000;
+.theme-row { display: flex; justify-content: flex-end; margin: 0 0 4px; }
+.theme-round {
+  -webkit-appearance: none;
+  appearance: none;
   padding: 8px 12px;
   border: 1px solid var(--line);
   border-radius: 999px;
-  background: var(--card);
+  background-color: var(--card);
   color: var(--text);
+  font: inherit;
   font-size: 16px;
+  line-height: 1;
   cursor: pointer;
 }
 * { box-sizing: border-box; }

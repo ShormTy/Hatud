@@ -3,7 +3,7 @@
 (function () {
   var KEY = "hatud-theme";
   var MODES = ["auto", "light", "dark"];
-  var ICONS = { auto: "\u25D0", light: "\u2600", dark: "\u263E" };
+  var ICONS = { auto: "\u25D0", light: "\u2600\uFE0E", dark: "\u263E\uFE0E" };
   var NAMES = { auto: "Auto", light: "Light", dark: "Dark" };
 
   function read() {
@@ -60,8 +60,12 @@
       btn.className = "link-button theme-btn";
       bar.insertBefore(btn, document.getElementById("signout"));
     } else {
-      btn.className = "theme-btn theme-fixed";
-      document.body.appendChild(btn);
+      btn.className = "theme-btn theme-round";
+      var row = document.createElement("div");
+      row.className = "theme-row";
+      row.appendChild(btn);
+      var host = document.querySelector("main") || document.body;
+      host.insertBefore(row, host.firstChild);
     }
     paint();
   });
