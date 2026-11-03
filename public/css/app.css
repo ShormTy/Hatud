@@ -166,3 +166,14 @@ legend { padding: 0; margin-bottom: 4px; font-size: 14px; color: var(--muted); }
 @media (prefers-reduced-motion: reduce) {
   .logo-anim .logo-h, .logo-anim .streak { animation: none; }
 }
+
+/* Small logo in the top bar (stage 7c): plays once when the page opens */
+.logo-mini { flex: none; width: 44px; height: auto; color: var(--brand); overflow: visible; }
+.logo-mini .logo-h { animation: logo-drive 0.9s cubic-bezier(0.2, 0.8, 0.2, 1) both; }
+.logo-mini .streak { transform-box: fill-box; transform-origin: right center; animation: logo-streak 0.6s ease-out both; }
+.logo-mini .s1 { animation-delay: 0.35s; }
+.logo-mini .s2 { animation-delay: 0.25s; }
+.logo-mini .s3 { animation-delay: 0.45s; }
+@media (prefers-reduced-motion: reduce) {
+  .logo-mini .logo-h, .logo-mini .streak { animation: none; }
+}
