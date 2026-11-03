@@ -1,4 +1,4 @@
-# Hatud: Project Brief (draft v0.95)
+# Hatud: Project Brief (draft v0.97)
 
 > **For any AI reading this:** This file is the full context for the Hatud project. Read it before replying. Treat the "Decisions" section as settled unless the user reopens it. Do not re-propose rejected ideas without new reasoning. Last updated: November 3, 2026.
 
@@ -208,13 +208,27 @@ Idea: build the smallest working version first (one student, one driver, one rid
 
 Stages 3 to 8 were accepted by the user in v0.19 (no changes requested).
 
+### Done and confirmed by the user (moved here from Section 10)
+
+When the user confirms an item from the Section 10 checklist, move its line here and tick it. Keep it short.
+
+- [x] **W5 (accepted; batch 8a; confirmed v0.96)** A student can no longer get stuck when his ride document is missing but his lock exists (for example after the owner deleted test rides in the console): the rules let him delete the lock when its ride does not exist, and the page frees him and shows the planner. Also covers a ride deleted while the page is open.
+
+- [x] **W7 (accepted; batch 8a; confirmed v0.97)** Clearer messages: a blocked student sees "Your account is blocked..." with the support address and the Request button is turned off; a blocked driver sees the same instead of "Waiting for approval"; driver refusals no longer all say "already taken" (Accept keeps its own message; other refusals say the request or account may have changed, please refresh).
+
+- [x] **P1 (user proposal; batch 8a; confirmed v0.97)** While a driver inspects a request (Show on map, or taps a numbered pin), the numbered pins of the other requests are hidden; a new button "Show all open requests on the map" (under the map, only while inspecting) brings them back. They also stay hidden during a ride, as before.
+
+- [x] **P2 (user proposal; batch 8a; confirmed v0.97)** A new Hatud-style 404 page (logo, theme colors, "This page took a wrong turn", Go to Hatud button, support address) replaces the Firebase default.
+
+- [x] **W6 (decided v0.95; confirmed v0.97)** A removed person can no longer write a new profile for himself: one line in the users create rule in firestore.rules refuses a new profile while a removedUsers note exists for that id; the note stays until the owner presses Forget on the Removed tab, so to free an email the owner deletes the login in Authentication first and then presses Forget. Habit, no code: use Block, not Remove, for anyone who must stay out (written as apply-stage8w6.sh).
+
 ---
 
 ## 9. Instructions for the next AI session
 
 - Start by summarizing this brief back to the user in two or three sentences to confirm you understand.
 - **Send the updated brief file with every reply.** Update the brief to the CURRENT state only (edit the existing sections); do not add a new dated log entry for every step.
-- **Scripts:** the user saves every apply-*.sh script in the **Downloads folder** and runs it from there with `bash ~/Downloads/apply-NAME.sh`, then deletes it. Always write the exact file name, the command, and the deploy commands. apply-stage7h.sh (fare agreement, release, decline, 10-minute cancel, popups, no Needed by) is deployed (user confirmed v0.94). Work from the checklist in Section 10: batch 8a is written as apply-stage8a.sh (run it, then `firebase deploy --only firestore` and `firebase deploy --only hosting`). Applied and working (user confirmed): stages 6i, 6k, 7a, 7b, 7c, 7d, and 7e (tab icon for the admin and 404 pages), 7f (real feedback form link) and 7g (new README), all deployed. Next: the user runs apply-stage8w6.sh (the W6 rule, decided v0.95) and tests it together with batch 8a (W12 is decided too: option c, in the polishing stage); then batch 8b (APK preparation), the APK with PWABuilder, then the pre-pilot items. Tick items in Section 10 only when the user confirms they work.
+- **Scripts:** the user saves every apply-*.sh script in the **Downloads folder** and runs it from there with `bash ~/Downloads/apply-NAME.sh`, then deletes it. Always write the exact file name, the command, and the deploy commands. apply-stage7h.sh (fare agreement, release, decline, 10-minute cancel, popups, no Needed by) is deployed (user confirmed v0.94). Work from the checklist in Section 10: batch 8a is written as apply-stage8a.sh (run it, then `firebase deploy --only firestore` and `firebase deploy --only hosting`). Applied and working (user confirmed): stages 6i, 6k, 7a, 7b, 7c, 7d, and 7e (tab icon for the admin and 404 pages), 7f (real feedback form link) and 7g (new README), all deployed. Next: Phase A of Section 10 (W8, W9, W10, W11, W12 and the light/dark switch W16, which the user moved before the APK in v0.97), written in small batches; then Phase B (APK preparation), the APK with PWABuilder, then the pre-pilot items. Tick items in Section 10 only when the user confirms they work.
 - Next step: all five screens are approved (v0.24). Section 8 stage 1 is in progress (v0.25): the GitHub repository and Visual Studio Code are done. The user was given steps to push the Hatud folder to the repository. Once they confirm it worked, set up a Firebase project on the free Spark plan (never click upgrade to Blaze), one small step at a time. The repository is public, so never put passwords or secret keys in it. After that, when the user is ready, start building at stage 1, one stage at a time, in plain language, with free, card-free tools only. Open question 4 (how Hatud could earn money) stays low priority. **Update v0.34:** the Firebase CLI is installed and logged in, the project hatud-app-shormty exists, and the Hosting site hatud exists (confirmed by sites:list; deploy to it, not the default site); next run firebase init in the Hatud folder (Hosting and Firestore), one small step at a time (see Section 8 stage 1).
 - Present new ideas as a short checklist the user can accept or reject, asking for a reason on rejections.
 - **Every service must be free with no credit card.** If a suggestion has any possible cost or needs a card, say so clearly and offer a free, card-free alternative.
@@ -225,36 +239,52 @@ Stages 3 to 8 were accepted by the user in v0.19 (no changes requested).
 
 ## 10. Work checklist (v0.94: the user asked for one place to tick things off)
 
-**How to use this section:** `[ ]` = to do, `[~]` = written or in progress, waiting for the user to test, `[x]` = done and confirmed by the user, `[?]` = waiting for the user's decision. Only the user ticks something as done, after testing it. Keep each line short; put the reasoning in Sections 3 to 5. Batches are written as apply-stageNAME.sh scripts (small exact edits, stop without changing anything if a line is missing).
+**How to use this section:** `[ ]` = to do, `[~]` = written or in progress, waiting for the user to test, `[x]` = done and confirmed by the user, `[?]` = waiting for the user's decision. Only the user ticks something as done, after testing it; a confirmed item is then moved out of this section to the Done list at the end of Section 8. Keep each line short; put the reasoning in Sections 3 to 5. Batches are written as apply-stageNAME.sh scripts (small exact edits, stop without changing anything if a line is missing).
 
 **Support address (v0.94):** hatud.support@gmail.com (kept in public/js/support.js; the privacy page and the 404 page use it too). The repository is public, so the address is visible to everyone; expect some spam.
 
-### Phase A: fixes in the app (batch 8a, written v0.94 as apply-stage8a.sh)
-- [x] **W5 (accepted)** A student can no longer get stuck when his ride document is missing but his lock exists (for example after the owner deleted test rides in the console): the rules let him delete the lock when its ride does not exist, and the page frees him and shows the planner. Also covers a ride deleted while the page is open.
-- [~] **W7 (accepted)** Clearer messages: a blocked student sees "Your account is blocked..." with the support address and the Request button is turned off; a blocked driver sees the same instead of "Waiting for approval"; driver refusals no longer all say "already taken" (Accept keeps its own message; other refusals say the request or account may have changed, please refresh).
-- [~] **P1 (user proposal)** While a driver inspects a request (Show on map, or taps a numbered pin), the numbered pins of the other requests are hidden; a new button "Show all open requests on the map" (under the map, only while inspecting) brings them back. They also stay hidden during a ride, as before.
-- [~] **P2 (user proposal)** A new Hatud-style 404 page (logo, theme colors, "This page took a wrong turn", Go to Hatud button, support address) replaces the Firebase default.
-- [~] **W6 (decided v0.95: do both; written as apply-stage8w6.sh, waiting for the user to test)** Remove deletes the profile but the login stays, so a removed person who knows his password could write a new profile for himself with the invite code using a developer tool (the app screens do not offer it; Block cannot be bypassed this way). Fix 1 (written): one line in the users create rule in firestore.rules refuses a new profile while a removedUsers note exists for that id; the note stays until the owner presses Forget on the Removed tab, so to free an email the owner deletes the login in Authentication first and then presses Forget (the README and the admin page already say this order). Fix 2 (a habit, no code): use Block, not Remove, for anyone who must stay out. Run: bash ~/Downloads/apply-stage8w6.sh, then firebase deploy --only firestore (no hosting deploy needed). Test: remove a test student, then try to sign up again with the same email and password (the login exists, so use a developer tool or just check that the removed person logging in still sees no profile); press Forget and confirm nothing else changed. The rules logic itself could not be run by the AI (no emulator).
+**Code check (v0.97, the AI read the code snapshot of November 3, 2026; the user then tested):** CONFIRMED by the user and moved to the Done list in Section 8: W5, W7, P1, P2, W6. PARTLY CODED: automatic old data cleanup (the student page deletes his own old rides; the driver page and the admin page do not clean anything yet). NOT CODED: W8, W9, W10 (and Delete my account), W11 (firebase.json has cache headers only), W12 (Leaflet still loads from cdnjs), W16, W1, W3, W4, Edit my profile, Alerts. NOT CODE (console or testing work): W2, the APK build, W13, W14, W15.
 
-### Phase B: APK preparation (batch 8b, to be written)
+### Phase A: before the APK (the user moved these up in v0.97; the AI writes them in small batches, in this order)
+
+- [ ] **W8 (accepted)** Keep the driver's screen on during a ride (Screen Wake Lock), and tell drivers plainly that the app must stay open to see new requests (no background alerts without a server).
+
+- [ ] **W9 (accepted, must)** Forgot password (see item 20.3: link on the login page, free Firebase reset email, a "type your email again" box at sign-up).
+
+- [ ] **W10 (accepted)** Privacy notice page with the owner's contact hatud.support@gmail.com: who is responsible, what is kept, that data is stored on Google Firebase servers in Singapore (asia-southeast1), how to ask for deletion; linked from sign-up and the page footers; also the Delete my account button (item 20.9). Not legal advice; the owner may want a teacher or adult to review it under RA 10173.
+
+- [ ] **W11 (accepted)** Security headers in firebase.json (nosniff, referrer policy, no framing).
+
+- [ ] **W12 (decided v0.95: option c; moved before the APK in v0.97)** Put a copy of Leaflet's files (a few hundred KB, free) inside the public folder and load them from there instead of cdnjs.cloudflare.com. Also works if a school network blocks cdnjs, and removes one outside service from the consent wording and the privacy page. No money involved.
+
+- [ ] **W16 (the user's proposal v0.97; this is the first part of item 20.4)** Light/dark switch: a theme button in the top bar (Light, Dark, Auto), remembered on the phone, teal stays the brand color. The rest of item 20.4 (a warm accent, rounder cards with soft shadows, colored status chips, small icons, gentle animations) stays in Phase D.
+
+### Phase B: APK preparation (after Phase A)
+
 - [ ] **W1 (accepted, must)** Serve the Digital Asset Links file. firebase.json ignores everything starting with a dot (`**/.*`), which hides `.well-known`. Put the file at public/well-known/assetlinks.json and add a rewrite from /.well-known/assetlinks.json to it plus a Content-Type application/json header; check the address in a browser. Two steps: the file needs the signing-key fingerprint that PWABuilder gives after the package is made. Use exactly https://hatud.web.app in PWABuilder. Keep the signing key and its password safe outside the repository (a lost key means no updates for installed APKs).
+
 - [ ] **W2 (accepted, must)** Tick location delegation in the PWABuilder Android options (both the student's Use my location and the driver's map use the location); test on a real phone that the permission box appears and the blue dot shows.
+
 - [ ] **W3 (accepted)** Manifest and icon polish: add id, a maskable 512 icon with safe padding, a category.
+
 - [ ] **W4 (accepted)** Offline page: a small cached offline.html ("No internet") instead of the browser error page when there is no signal.
+
 - [ ] Build the APK with PWABuilder, add the fingerprint (W1 step 2), test on 2 to 3 real Android phones, write the one-page install guide.
 
-### Phase C: before real users join
-- [ ] **W8 (accepted)** Keep the driver's screen on during a ride (Screen Wake Lock), and tell drivers plainly that the app must stay open to see new requests (no background alerts without a server).
-- [ ] **W9 (accepted, must)** Forgot password (see item 20.3: link on the login page, free Firebase reset email, a "type your email again" box at sign-up).
-- [ ] **W10 (accepted)** Privacy notice page with the owner's contact hatud.support@gmail.com: who is responsible, what is kept, that data is stored on Google Firebase servers in Singapore (asia-southeast1), how to ask for deletion; linked from sign-up and the page footers; also the Delete my account button (item 20.9). Not legal advice; the owner may want a teacher or adult to review it under RA 10173.
-- [ ] **W11 (accepted)** Security headers in firebase.json (nosniff, referrer policy, no framing).
-- [ ] **W12 (decided v0.95: option c)** Put a copy of Leaflet's files (a few hundred KB, free) inside the public folder and load them from there instead of cdnjs.cloudflare.com, in the polishing stage. Also works if a school network blocks cdnjs, and removes one outside service from the consent wording and the privacy page. No money involved.
+### Phase C: before real users join (the rest)
+
 - [ ] **W14 (accepted, must)** Attack checklist (about 12 tests to run in the console or a private window, for example a student setting a fare, a pending driver reading requests, a driver tapping On the way without agreement) plus tests on 2 to 3 real phones. The rules have never run in an emulator.
+
 - [ ] Old data cleanup, automatic (item 20.8), also check that cleanup deleting rides never leaves a lock behind (W5 covers the stuck case).
 
 ### Phase D: polishing stage (after the above)
+
 - [ ] **W13 (accepted: "we will do that in the polishing stages")** Restrict the Firebase web API key to hatud.web.app and hatud-app-shormty.firebaseapp.com in the Google Cloud console; test login afterwards and undo if it breaks.
-- [ ] Design and light/dark switch (item 20.4, keep teal), Edit my profile (20.5), Alerts while the page is open (20.6).
+
+- [ ] Rest of the design (item 20.4 without the switch): a warm accent next to the teal, rounder cards with soft shadows, colored status chips, small icons, gentle animations (off for reduced motion); light on old phones.
+
+- [ ] Edit my profile (item 20.5) and Alerts while the page is open (item 20.6).
 
 ### Known limits (W15, accepted; revisit after deployment, "we will do that in the future after deployment")
+
 - [ ] The public OSRM routing server and OpenStreetMap tile server are for light use: fine for the pilot, plan another provider if it grows; the Spark plan has no automatic backups; reports from a ride cancelled right after acceptance are unverified, so the owner reads them with care.
