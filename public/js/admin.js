@@ -9,7 +9,8 @@ import {
   getDocs,
   collection,
   updateDoc,
-  deleteDoc
+  deleteDoc,
+  writeBatch
 } from "https://www.gstatic.com/firebasejs/12.3.0/firebase-firestore.js";
 
 const byId = (id) => document.getElementById(id);
@@ -86,6 +87,23 @@ const setApproval = (uid, status) => change(async () => {
   ? "Approve " + who(uid) + "? Only do this after you checked the papers and the vehicle in person."
   : "Set " + who(uid) + " back to pending? They will not see ride requests until you approve again.");
 
+// Removes the profile (users) and, for a driver, the driver record.
+// The login in Firebase Authentication stays: only the console can delete it.
+async function removePerson(uid) {
+  if (admins.has(uid)) { say("An admin cannot be removed here."); return; }
+  let done = false;
+  await change(async () => {
+    const batch = writeBatch(db);
+    batch.delete(doc(db, "users", uid));
+    if (drivers.has(uid)) batch.delete(doc(db, "drivers", uid));
+    await batch.commit();
+    users.delete(uid);
+    drivers.delete(uid);
+    done = true;
+  }, "Remove " + who(uid) + "?\n\nThis deletes the profile (and the driver record). The login stays in Firebase Authentication, so the email stays taken until you delete it there. To keep someone out for good, use Block instead.");
+  if (done) say("Removed. UID: " + uid + ". To free the email: Firebase console, Authentication, Users, three dots, Delete account.");
+}
+
 const setReportStatus = (r, status) => change(async () => {
   await updateDoc(doc(db, "reports", r.id), { status });
   r.status = status;
@@ -115,6 +133,7 @@ function driverCard(uid, d) {
     : button("Approve", "primary", () => setApproval(uid, "approved")));
   const b = blockButton(uid);
   if (b) card.append(b);
+  card.append(button("Remove", "secondary", () => removePerson(uid)));
   return card;
 }
 
@@ -126,7 +145,10 @@ function personCard(uid, u, canBlock) {
   card.append(line("Contact:", u.contactNumber));
   card.append(line("Signed up:", when(u.createdAt)));
   card.append(line("ID:", uid));
-  if (canBlock) card.append(blockButton(uid));
+  if (canBlock) {
+    card.append(blockButton(uid));
+    card.append(button("Remove", "secondary", () => removePerson(uid)));
+  }
   return card;
 }
 

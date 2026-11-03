@@ -49,7 +49,8 @@ service cloud.firestore {
       allow update: if isAdmin()
         && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['blocked'])
         && request.resource.data.blocked is bool;
-      // No other updates or deletes from the app.
+      // An admin can remove a profile (the login in Authentication stays).
+      allow delete: if isAdmin();
     }
 
     function isNewStudent(d) {
@@ -99,7 +100,8 @@ service cloud.firestore {
       allow update: if isAdmin()
         && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['approvalStatus'])
         && request.resource.data.approvalStatus in ['approved', 'pending'];
-      // No deletes from the app.
+      // An admin can remove a driver record.
+      allow delete: if isAdmin();
     }
 
     function isNewDriverRecord(d) {
