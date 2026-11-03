@@ -1,7 +1,7 @@
 // The feedback link at the bottom of the student and driver pages.
 // The owner pastes the Google Form address below, between the quotes
 // (it must start with https://). Until then the link says the form is not ready.
-const FEEDBACK_URL = "PASTE_THE_GOOGLE_FORM_LINK_HERE";
+const FEEDBACK_URL = "https://forms.gle/hwNzD6Lp22T8eHJB7";
 
 const link = document.getElementById("feedback-link");
 if (link) {
