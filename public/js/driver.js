@@ -28,6 +28,8 @@ let shownPins = [];
 let rides = [];          // open requests as last received: [{ id, data }]
 let myRides = [];        // rides this driver has accepted: [{ id, data }]
 let selectedId = null;
+let driverPos = null;    // the driver's own position (stays on his phone, never saved)
+let lastListPos = null;  // where the list was last sorted from
 let currentId = null;    // the ride shown in "Your current ride"
 const typedFares = {};   // what the driver typed per request, kept while the list redraws
 
@@ -151,10 +153,29 @@ async function accept(id, fareText) {
 
 function renderList() {
   const now = Date.now();
-  // Hide requests that ran out of time but were not closed yet. Oldest deadline first.
+  // Hide requests that ran out of time but were not closed yet.
   const open = rides
     .filter((r) => r.data.expiresAt.toDate().getTime() > now)
-    .sort((a, b) => a.data.expiresAt.toMillis() - b.data.expiresAt.toMillis());
+    .map((r) => ({
+      ...r,
+      // Straight-line distance from the driver to the pickup point, in km (null if his position is unknown).
+      away: driverPos
+        ? driverPos.distanceTo(L.latLng(r.data.pickup.lat, r.data.pickup.lng)) / 1000
+        : null
+    }));
+
+  // Nearest pickup first when his position is known; otherwise the ones closing soonest first.
+  if (driverPos) {
+    open.sort((a, b) => a.away - b.away || a.data.expiresAt.toMillis() - b.data.expiresAt.toMillis());
+  } else {
+    open.sort((a, b) => a.data.expiresAt.toMillis() - b.data.expiresAt.toMillis());
+  }
+  lastListPos = driverPos;
+
+  byId("sort-hint").textContent = driverPos
+    ? "Sorted from the nearest pickup to the farthest. Distances are in a straight line, so the road is a bit longer."
+    : "Allow location access to see how far each pickup is from you and to sort the nearest first. Until then, the ones closing soonest are on top.";
+  byId("sort-hint").classList.toggle("hidden", open.length === 0 && !driverPos);
 
   byId("empty").classList.toggle("hidden", open.length > 0);
   const box = byId("requests");
@@ -165,7 +186,7 @@ function renderList() {
     if (!currentId) clearPins();
   }
 
-  open.forEach(({ id, data }) => {
+  open.forEach(({ id, data, away }) => {
     const card = document.createElement("article");
     card.className = "request-card" + (id === selectedId ? " selected" : "");
 
@@ -174,9 +195,12 @@ function renderList() {
       L.latLng(data.dropoff.lat, data.dropoff.lng)
     ) / 1000;
 
+    if (away !== null) {
+      card.appendChild(line("Pickup is from you:", "about " + away.toFixed(1) + " km away"));
+    }
     card.appendChild(line("From (A):", placeText(data.pickup, "Pin A on the map")));
     card.appendChild(line("To (B):", placeText(data.dropoff, "Pin B on the map")));
-    card.appendChild(line("Distance:", "about " + km.toFixed(1) + " km in a straight line"));
+    card.appendChild(line("Trip distance:", "about " + km.toFixed(1) + " km in a straight line"));
     if (data.neededBy) card.appendChild(line("Needed by:", whenText(data.neededBy.toDate())));
     card.appendChild(line("Open until:", whenText(data.expiresAt.toDate())));
 
@@ -447,7 +471,25 @@ async function renderCurrent() {
 
 // ---------- Listening ----------
 
+// Follows the driver's own position so the list can show distances and sort nearest first.
+// The position stays on his phone. The list is only redrawn after he has moved a good way,
+// and never while he is typing a fare.
+function startPositionForList() {
+  if (!navigator.geolocation) return;
+  navigator.geolocation.watchPosition(
+    (position) => {
+      driverPos = L.latLng(position.coords.latitude, position.coords.longitude);
+      const moved = !lastListPos || driverPos.distanceTo(lastListPos) > 100;
+      const typing = document.activeElement && document.activeElement.tagName === "INPUT";
+      if (moved && !typing) renderList();
+    },
+    () => { /* Location not allowed: the list still works, sorted by closing time. */ },
+    { enableHighAccuracy: false, maximumAge: 15000, timeout: 20000 }
+  );
+}
+
 function startListening() {
+  startPositionForList();
   const fail = () => {
     status.textContent = "Couldn’t load the requests. Please check your internet and refresh.";
   };
