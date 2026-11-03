@@ -23,4 +23,4 @@ Live site: https://hatud.web.app
 
 ## Rule: no secrets in this repository
 
-It is public. Never commit passwords, tokens, private keys or APK signing keys.
+It is public. Never commit passwords, tokens, private keys or APK signing keys, ever.
