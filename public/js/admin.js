@@ -10,7 +10,8 @@ import {
   collection,
   updateDoc,
   deleteDoc,
-  writeBatch
+  writeBatch,
+  serverTimestamp
 } from "https://www.gstatic.com/firebasejs/12.3.0/firebase-firestore.js";
 
 const byId = (id) => document.getElementById(id);
@@ -27,6 +28,7 @@ let users = new Map();
 let drivers = new Map();
 let reports = [];
 let admins = new Set();
+let removed = new Map();
 let tab = "drivers";
 
 // Everything people typed is shown with textContent, never as HTML.
@@ -93,15 +95,43 @@ async function removePerson(uid) {
   if (admins.has(uid)) { say("An admin cannot be removed here."); return; }
   let done = false;
   await change(async () => {
+    // A small note is kept in removedUsers so the person stays on the Removed tab after a refresh.
+    const u = users.get(uid) || {};
+    const d = drivers.get(uid);
+    const note = { name: u.name || "", role: u.role || "", contactNumber: u.contactNumber || "" };
+    if (u.school) note.school = u.school;
+    if (d) { note.vehicleType = d.vehicleType; note.plateNumber = d.plateNumber; }
     const batch = writeBatch(db);
+    batch.set(doc(db, "removedUsers", uid), { ...note, removedAt: serverTimestamp() });
     batch.delete(doc(db, "users", uid));
-    if (drivers.has(uid)) batch.delete(doc(db, "drivers", uid));
+    if (d) batch.delete(doc(db, "drivers", uid));
     await batch.commit();
+    removed.set(uid, { ...note, removedAt: { toDate: () => new Date() } });
     users.delete(uid);
     drivers.delete(uid);
     done = true;
   }, "Remove " + who(uid) + "?\n\nThis deletes the profile (and the driver record). The login stays in Firebase Authentication, so the email stays taken until you delete it there. To keep someone out for good, use Block instead.");
   if (done) say("Removed. UID: " + uid + ". To free the email: Firebase console, Authentication, Users, three dots, Delete account.");
+}
+
+// Deletes the note too, once the login is gone from Firebase Authentication.
+const forgetRemoved = (uid) => change(async () => {
+  await deleteDoc(doc(db, "removedUsers", uid));
+  removed.delete(uid);
+}, "Forget " + (removed.get(uid).name || uid) + "?\n\nOnly do this after you deleted the login in Firebase Authentication (Users, three dots, Delete account). This deletes the note for good.");
+
+function removedCard(uid, n) {
+  const card = el("div", null, "history-item");
+  card.append(el("p", n.name || uid, "panel-title"));
+  card.append(line("Role:", n.role));
+  if (n.school) card.append(line("School:", n.school));
+  if (n.vehicleType) card.append(line("Vehicle:", n.vehicleType + ", plate " + n.plateNumber));
+  card.append(line("Contact:", n.contactNumber));
+  card.append(line("Removed:", when(n.removedAt)));
+  card.append(line("ID:", uid));
+  card.append(el("p", "The login may still exist in Firebase Authentication (the email stays taken until you delete it there).", "hint"));
+  card.append(button("Forget (delete this note)", "secondary", () => forgetRemoved(uid)));
+  return card;
 }
 
 const setReportStatus = (r, status) => change(async () => {
@@ -175,6 +205,7 @@ function render() {
     drivers: "Drivers (" + drivers.size + (pending ? ", " + pending + " waiting" : "") + ")",
     students: "Students (" + students.length + ")",
     admins: "Admins (" + admins.size + ")",
+    removed: "Removed (" + removed.size + ")",
     reports: "Reports (" + fresh + " new)"
   };
   const tabs = byId("tabs");
@@ -200,6 +231,9 @@ function render() {
     students.filter(([uid, u]) => match(u.name + " " + u.contactNumber + " " + uid))
       .sort(byName)
       .forEach(([uid, u]) => cards.push(personCard(uid, u, true)));
+  } else if (tab === "removed") {
+    [...removed].sort(([, a], [, b]) => (b.removedAt?.toMillis?.() || Date.now()) - (a.removedAt?.toMillis?.() || Date.now()))
+      .forEach(([uid, n]) => cards.push(removedCard(uid, n)));
   } else if (tab === "admins") {
     // Admins are made and removed by hand in the Firebase console, so there are no buttons here.
     [...admins].map((uid) => [uid, users.get(uid) || { name: uid, role: "no profile" }])
@@ -218,7 +252,8 @@ function render() {
 async function load() {
   say("Loading…");
   try {
-    const [u, d, r, a] = await Promise.all(["users", "drivers", "reports", "admins"].map((name) => getDocs(collection(db, name))));
+    const [u, d, r, a, x] = await Promise.all(["users", "drivers", "reports", "admins", "removedUsers"].map((name) => getDocs(collection(db, name))));
+    removed = new Map(x.docs.map((y) => [y.id, y.data()]));
     users = new Map(u.docs.map((x) => [x.id, x.data()]));
     drivers = new Map(d.docs.map((x) => [x.id, x.data()]));
     reports = r.docs.map((x) => ({ id: x.id, ...x.data() }));

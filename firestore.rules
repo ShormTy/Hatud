@@ -114,6 +114,17 @@ service cloud.firestore {
         && d.available == false;
     }
 
+    // ---- removedUsers: the owner's list of people removed from the admin page ----
+    // Only an admin can read, add or delete a note. It holds no more than the
+    // person's own profile fields, and the admin deletes it when no longer needed.
+    match /removedUsers/{uid} {
+      allow read, delete: if isAdmin();
+      allow create: if isAdmin()
+        && request.resource.data.keys().hasOnly(['name', 'role', 'contactNumber', 'school', 'vehicleType', 'plateNumber', 'removedAt'])
+        && request.resource.data.keys().hasAll(['name', 'role', 'contactNumber', 'removedAt'])
+        && request.resource.data.removedAt == request.time;
+    }
+
     // ---- rides: a student's ride requests ----
     // A request is created together with a small "lock" record (below). The
     // lock can only exist once per student, so a student can have only one open
