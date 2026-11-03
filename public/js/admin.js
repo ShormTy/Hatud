@@ -204,7 +204,7 @@ const stop = onAuthStateChanged(auth, async (user) => {
   if (!user) { location.replace("index.html"); return; }
   try {
     const admin = await getDoc(doc(db, "admins", user.uid));
-    if (!admin.exists()) { location.replace("index.html"); return; }
+    if (!admin.exists()) { say("Not an admin. Your UID is " + user.uid + ". No document admins/" + user.uid + " was found."); return; }
   } catch (error) {
     say("Could not check your account. Refresh the page.");
     return;
