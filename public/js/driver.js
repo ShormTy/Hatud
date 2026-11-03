@@ -20,6 +20,7 @@ const byId = (id) => document.getElementById(id);
 const TAGBILARAN = [9.6472, 123.855];
 
 const status = byId("status");
+const ACCEPT_HELP = "Type your fare and tap Accept ride on a request.";
 const note = byId("note");
 let me = null;           // { user, profile }
 let vehicle = null;      // this driver's record (vehicle type, plate, contact)
@@ -28,6 +29,7 @@ let shownPins = [];
 let rides = [];          // open requests as last received: [{ id, data }]
 let myRides = [];        // rides this driver has accepted: [{ id, data }]
 let selectedId = null;
+let centeredOnDriver = false;
 let driverPos = null;    // the driver's own position (stays on his phone, never saved)
 let lastListPos = null;  // where the list was last sorted from
 let roadAway = {};       // road distance to each pickup: { rideId: { km, min } }
@@ -78,6 +80,57 @@ function showOnMap(ride) {
     L.marker(to, { icon: pinIcon("B", "dropoff"), interactive: false }).addTo(map)
   ];
   map.fitBounds(L.latLngBounds([from, to]), { padding: [40, 40], maxZoom: 17 });
+}
+
+// The driver's own blue dot. One marker is shared by the list and the current ride;
+// his position stays on his phone and is never saved.
+function showYou(here) {
+  if (!map) return;
+  if (!youMarker) {
+    youMarker = L.circleMarker(here, {
+      radius: 9, color: "#ffffff", weight: 3, fillColor: "#2563eb", fillOpacity: 1
+    }).addTo(map).bindTooltip("You");
+  } else {
+    youMarker.setLatLng(here);
+  }
+}
+
+// A numbered pin for every open request, matching the order of the cards. Drawing
+// them costs nothing: it happens on the phone, with no extra network use.
+const requestPins = {};
+
+function numberIcon(number) {
+  return L.divIcon({
+    className: "pin pin-req",
+    html: "<span>" + number + "</span>",
+    iconSize: [30, 30],
+    iconAnchor: [15, 15]
+  });
+}
+
+function updateRequestPins(open) {
+  const wanted = new Set(currentId ? [] : open.map((r) => r.id));
+  Object.keys(requestPins).forEach((id) => {
+    if (!wanted.has(id) || id === selectedId) {
+      map.removeLayer(requestPins[id]);
+      delete requestPins[id];
+    }
+  });
+  if (currentId) return;
+  open.forEach(({ id, data }, index) => {
+    if (id === selectedId) return; // the selected one is drawn with its A and B pins
+    if (requestPins[id]) {
+      requestPins[id].setIcon(numberIcon(index + 1));
+    } else {
+      requestPins[id] = L.marker([data.pickup.lat, data.pickup.lng], { icon: numberIcon(index + 1) })
+        .addTo(map)
+        .on("click", () => {
+          selectedId = id;
+          showOnMap(data);
+          renderList();
+        });
+    }
+  });
 }
 
 // ---------- Helpers ----------
@@ -185,7 +238,14 @@ function renderList() {
         ? "Sorted from the nearest pickup to the farthest, by road."
         : "Sorted from the nearest pickup to the farthest. Road distances are loading; until then the distance is in a straight line.")
     : "Allow location access to see how far each pickup is from you and to sort the nearest first. Until then, the ones closing soonest are on top.";
-  byId("sort-hint").classList.toggle("hidden", open.length === 0 && !driverPos);
+  byId("sort-hint").classList.toggle("hidden", open.length === 0);
+
+  // The "type a fare" instruction at the top shows only when there is something to accept.
+  if (status.textContent === ACCEPT_HELP || status.textContent === "") {
+    const showHelp = open.length > 0 && !currentId;
+    status.textContent = showHelp ? ACCEPT_HELP : "";
+    status.classList.toggle("hidden", !showHelp);
+  }
 
   byId("empty").classList.toggle("hidden", open.length > 0);
   const box = byId("requests");
@@ -215,7 +275,12 @@ function renderList() {
     }
     card.appendChild(line("From (A):", placeText(data.pickup, "Pin A on the map")));
     card.appendChild(line("To (B):", placeText(data.dropoff, "Pin B on the map")));
-    card.appendChild(line("Trip distance:", "about " + km.toFixed(1) + " km in a straight line"));
+    card.appendChild(line(
+      "Trip distance:",
+      road && road.tripKm !== undefined
+        ? "about " + road.tripKm.toFixed(1) + " km by road (about " + Math.max(1, Math.round(road.tripMin)) + " min)"
+        : "about " + km.toFixed(1) + " km in a straight line"
+    ));
     if (data.neededBy) card.appendChild(line("Needed by:", whenText(data.neededBy.toDate())));
     card.appendChild(line("Open until:", whenText(data.expiresAt.toDate())));
 
@@ -259,6 +324,7 @@ function renderList() {
     box.appendChild(card);
   });
 
+  updateRequestPins(open);
   maybeFetchRoadDistances(open);
 }
 
@@ -273,15 +339,25 @@ async function maybeFetchRoadDistances(open) {
   if (key === roadKey && !moved) return;
   if (Date.now() - roadAt < 10000) return;
 
-  const batch = [...open].sort((a, b) => a.straight - b.straight).slice(0, 50);
+  // At most 25 requests (the nearest ones) get road distances; the rest keep straight lines.
+  const batch = [...open].sort((a, b) => a.straight - b.straight).slice(0, 25);
   roadBusy = true;
   roadAt = Date.now();
   const from = driverPos;
   try {
-    const points = [from, ...batch.map((r) => L.latLng(r.data.pickup.lat, r.data.pickup.lng))];
+    // Points in order: the driver (0), then every pickup (1..n), then every drop-off (n+1..2n).
+    const n = batch.length;
+    const points = [
+      from,
+      ...batch.map((r) => L.latLng(r.data.pickup.lat, r.data.pickup.lng)),
+      ...batch.map((r) => L.latLng(r.data.dropoff.lat, r.data.dropoff.lng))
+    ];
     const coords = points.map((p) => p.lng + "," + p.lat).join(";");
+    const sources = Array.from({ length: n + 1 }, (_, i) => i).join(";");
+    const destinations = Array.from({ length: 2 * n }, (_, i) => i + 1).join(";");
     const response = await fetch(
-      "https://router.project-osrm.org/table/v1/driving/" + coords + "?sources=0&annotations=distance,duration"
+      "https://router.project-osrm.org/table/v1/driving/" + coords
+        + "?sources=" + sources + "&destinations=" + destinations + "&annotations=distance,duration"
     );
     if (!response.ok) throw new Error("table " + response.status);
     const json = await response.json();
@@ -289,9 +365,18 @@ async function maybeFetchRoadDistances(open) {
 
     const next = {};
     batch.forEach((r, i) => {
-      const meters = json.distances[0][i + 1];
-      const seconds = json.durations[0][i + 1];
-      if (meters !== null && seconds !== null) next[r.id] = { km: meters / 1000, min: seconds / 60 };
+      // Row 0 is the driver; row i + 1 is pickup i. Columns start at point 1.
+      const meters = json.distances[0][i];
+      const seconds = json.durations[0][i];
+      const tripMeters = json.distances[i + 1][n + i];
+      const tripSeconds = json.durations[i + 1][n + i];
+      if (meters !== null && seconds !== null) {
+        next[r.id] = { km: meters / 1000, min: seconds / 60 };
+        if (tripMeters !== null && tripSeconds !== null) {
+          next[r.id].tripKm = tripMeters / 1000;
+          next[r.id].tripMin = tripSeconds / 60;
+        }
+      }
     });
     roadAway = next;
     roadFrom = from;
@@ -370,13 +455,7 @@ async function drawLeg(key, from, to, style, label, ride) {
 function onPosition(position, ride) {
   if (tracked !== ride) return;
   const here = L.latLng(position.coords.latitude, position.coords.longitude);
-  if (!youMarker) {
-    youMarker = L.circleMarker(here, {
-      radius: 9, color: "#ffffff", weight: 3, fillColor: "#2563eb", fillOpacity: 1
-    }).addTo(map);
-  } else {
-    youMarker.setLatLng(here);
-  }
+  showYou(here);
 
   const pickup = L.latLng(ride.pickup.lat, ride.pickup.lng);
   const dropoff = L.latLng(ride.dropoff.lat, ride.dropoff.lng);
@@ -431,7 +510,6 @@ function stopTracking() {
   if (watchId !== null) navigator.geolocation.clearWatch(watchId);
   watchId = null;
   tracked = null;
-  if (youMarker) { map.removeLayer(youMarker); youMarker = null; }
   setLeg("toPickup", null);
   setLeg("pickupToDrop", null);
   lastRouteFrom = null;
@@ -486,6 +564,7 @@ async function renderCurrent() {
   if (!active) {
     currentId = null;
     stopTracking();
+    renderList(); // the numbered request pins come back
     return;
   }
   // The status line and the button follow the ride's status every time.
@@ -501,6 +580,7 @@ async function renderCurrent() {
 
   if (currentId === active.id) return; // the details below are already shown
   currentId = active.id;
+  renderList(); // the numbered request pins go away while he is on a ride
 
   const data = active.data;
   byId("current-fare").textContent = "₱" + data.fare;
@@ -539,6 +619,11 @@ function startPositionForList() {
   navigator.geolocation.watchPosition(
     (position) => {
       driverPos = L.latLng(position.coords.latitude, position.coords.longitude);
+      showYou(driverPos);
+      if (!centeredOnDriver && !selectedId && !currentId) {
+        centeredOnDriver = true;
+        map.setView(driverPos, 15);
+      }
       const moved = !lastListPos || driverPos.distanceTo(lastListPos) > 100;
       const typing = document.activeElement && document.activeElement.tagName === "INPUT";
       if (moved && !typing) renderList();
@@ -552,6 +637,7 @@ function startListening() {
   startPositionForList();
   const fail = () => {
     status.textContent = "Couldn’t load the requests. Please check your internet and refresh.";
+    status.classList.remove("hidden");
   };
 
   onSnapshot(
@@ -595,7 +681,8 @@ requireRole("driver")
     }
 
     if (vehicle && vehicle.approvalStatus === "approved" && session.profile.blocked !== true) {
-      status.textContent = "Approved. Type a fare and tap Accept ride on a request.";
+      status.textContent = "";
+      status.classList.add("hidden");
       byId("open-area").classList.remove("hidden");
       startMap();
       startListening();

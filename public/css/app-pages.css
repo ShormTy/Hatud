@@ -87,3 +87,6 @@ input[type="datetime-local"] { min-height: 46px; }
 .driver-box a, #current a { color: var(--brand); }
 .request-card label { margin-top: 12px; }
 .request-card .primary { margin-top: 10px; }
+
+/* Driver: numbered pins for open requests */
+.pin-req span { background: #475569; }
