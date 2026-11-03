@@ -2,6 +2,7 @@
 // see the open request, cancel it.
 import { requireRole, logOut } from "./session.js";
 import { db } from "./firebase.js";
+import { addReportControls, loadReported } from "./report.js";
 import {
   doc,
   collection,
@@ -555,6 +556,7 @@ function renderHistory(past) {
     historyLine(item, "To:", placeText(d.dropoff, "Pin B on the map"));
     if (d.fare !== null && d.fare !== undefined) historyLine(item, "Fare:", "₱" + d.fare + " (cash)");
     if (d.driverName) historyLine(item, "Driver:", d.driverName + " • " + d.vehicleType + " • " + d.plateNumber);
+    addReportControls(item, r.id, d, "student", me.user.uid);
     list.appendChild(item);
   });
 }
@@ -612,6 +614,7 @@ requireRole("student")
     byId("hello").textContent = session.profile.name;
     startWatchingMe();
     await showCurrentState();
+    await loadReported(session.user.uid);
     startHistory();
   })
   .catch(() => say("Couldn’t load your account. Please check your internet and refresh."));

@@ -3,6 +3,7 @@
 import { requireRole, logOut } from "./session.js";
 import { db } from "./firebase.js";
 import { makeCaps } from "./caps.js";
+import { addReportControls, loadReported } from "./report.js";
 import {
   doc,
   getDoc,
@@ -654,6 +655,7 @@ function renderHistory() {
     historyLine(item, "From:", placeText(d.pickup, "Pin A on the map"));
     historyLine(item, "To:", placeText(d.dropoff, "Pin B on the map"));
     if (d.fare !== null && d.fare !== undefined) historyLine(item, "Fare:", "₱" + d.fare + " (cash)");
+    addReportControls(item, r.id, d, "driver", me.user.uid);
     list.appendChild(item);
   });
 }
@@ -881,6 +883,7 @@ requireRole("driver")
       status.textContent = "";
       status.classList.add("hidden");
       byId("open-area").classList.remove("hidden");
+      await loadReported(session.user.uid);
       startMap();
       startListening();
     } else {

@@ -280,6 +280,39 @@ service cloud.firestore {
         && d.deleteAfter <= request.time + duration.value(31, 'd');
     }
 
+    // ---- reports: a student or a driver flags a problem with a finished ride ----
+    // One report per person per ride (the document id is rideId_reporterId, and a
+    // report can only be created, never changed). Each person can read only his own
+    // reports; the owner reads all of them in the Firebase console, marks them
+    // reviewed, and can block an account there (users/{uid}.blocked = true).
+    match /reports/{reportId} {
+      allow read: if isSelf(resource.data.reporterId);
+      allow create: if request.auth != null
+        && request.resource.data.rideId is string
+        && reportId == request.resource.data.rideId + '_' + request.auth.uid
+        && isNewReport(request.resource.data);
+    }
+
+    function isNewReport(d) {
+      let ride = get(/databases/$(database)/documents/rides/$(d.rideId)).data;
+      let account = get(/databases/$(database)/documents/users/$(request.auth.uid)).data;
+      return d.keys().hasOnly(['rideId', 'reporterId', 'reporterRole', 'reportedId', 'reason', 'details', 'status', 'createdAt'])
+        && d.keys().hasAll(['rideId', 'reporterId', 'reporterRole', 'reportedId', 'reason', 'details', 'status', 'createdAt'])
+        && account.blocked == false
+        && d.reporterId == request.auth.uid
+        && d.reporterRole == account.role
+        // The ride had a driver and is finished (completed, or cancelled after a driver accepted).
+        && ride.driverId != null
+        && ride.status in ['completed', 'cancelled']
+        // The reporter was on this ride, and reports the other person.
+        && ((account.role == 'student' && ride.studentId == request.auth.uid && d.reportedId == ride.driverId)
+            || (account.role == 'driver' && ride.driverId == request.auth.uid && d.reportedId == ride.studentId))
+        && d.reason in ['unreasonable_fare', 'unsafe_or_rude', 'no_show', 'wrong_vehicle', 'refused_to_pay', 'other']
+        && d.details is string && d.details.size() <= 200
+        && d.status == 'new'
+        && d.createdAt == request.time;
+    }
+
     // Everything not listed above is denied.
   }
 }
