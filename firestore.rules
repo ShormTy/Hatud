@@ -145,12 +145,40 @@ service cloud.firestore {
       // The student can cancel his own request while it is open or accepted (the
       // "On the way" button will close this window in the next step), or close it
       // once it has really run out of time. Nothing else may change from his side.
+      // If the driver has been "on the way" for 10 minutes or more, the student may
+      // cancel too (for example when the driver never comes). The choice is his.
       allow update: if isSelf(resource.data.studentId)
         && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status'])
         && ((resource.data.status in ['requested', 'accepted'] && request.resource.data.status == 'cancelled')
+            || (resource.data.status == 'on_the_way'
+                && request.resource.data.status == 'cancelled'
+                && resource.data.startedAt <= request.time - duration.value(10, 'm'))
             || (resource.data.status == 'requested'
                 && request.resource.data.status == 'expired'
                 && resource.data.expiresAt <= request.time));
+
+      // The student agrees to the final fare. Until he does (or the driver accepts his
+      // counter-offer), the driver cannot tap "On the way". He can agree when he sent no
+      // counter-offer, or after the driver has answered it.
+      allow update: if isSelf(resource.data.studentId)
+        && resource.data.status == 'accepted'
+        && resource.data.get('fareAgreed', false) != true
+        && (resource.data.counterOffer == null || resource.data.get('counterAnswer', null) != null)
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['fareAgreed'])
+        && request.resource.data.fareAgreed == true;
+
+      // The student declines the fare (before agreeing): the request opens again for
+      // other drivers.
+      allow update: if isSelf(resource.data.studentId)
+        && resource.data.status == 'accepted'
+        && resource.data.get('fareAgreed', false) != true
+        && isReopened(request.resource.data, resource.data);
+
+      // The driver releases an accepted ride (before "On the way"): the request opens
+      // again for other drivers.
+      allow update: if isSelf(resource.data.driverId)
+        && resource.data.status == 'accepted'
+        && isReopened(request.resource.data, resource.data);
 
       // The student can send ONE counter-offer while the ride is accepted: a whole
       // number of pesos, lower than the driver's fare. Once counterOffer is set it can
@@ -158,6 +186,7 @@ service cloud.firestore {
       allow update: if isSelf(resource.data.studentId)
         && resource.data.status == 'accepted'
         && resource.data.counterOffer == null
+        && resource.data.get('fareAgreed', false) != true
         && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['counterOffer'])
         && request.resource.data.counterOffer is int
         && request.resource.data.counterOffer >= 1
@@ -197,12 +226,12 @@ service cloud.firestore {
                 && request.resource.data.fare == resource.data.counterOffer));
 
       // The accepting driver moves his own ride forward: "On the way", then "Completed".
-      // After "On the way" the student can no longer cancel (his rule above only
-      // covers requested and accepted rides).
+      // "On the way" needs the student's agreement to the fare first. After it, the
+      // student can cancel only when 10 minutes have passed (his rule above).
       allow update: if isApprovedDriver()
         && isSelf(resource.data.driverId)
         && resource.data.status == 'accepted'
-        && (resource.data.counterOffer == null || resource.data.get('counterAnswer', null) != null)
+        && (resource.data.get('fareAgreed', false) == true || resource.data.get('counterAnswer', null) == 'accepted')
         && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status', 'startedAt'])
         && request.resource.data.status == 'on_the_way'
         && request.resource.data.startedAt == request.time;
@@ -261,6 +290,9 @@ service cloud.firestore {
       allow delete: if isSelf(uid)
         && ((get(/databases/$(database)/documents/rides/$(resource.data.rideId)).data.status in ['requested', 'accepted']
              && getAfter(/databases/$(database)/documents/rides/$(resource.data.rideId)).data.status in ['cancelled', 'expired'])
+            || (get(/databases/$(database)/documents/rides/$(resource.data.rideId)).data.status == 'on_the_way'
+                && get(/databases/$(database)/documents/rides/$(resource.data.rideId)).data.startedAt <= request.time - duration.value(10, 'm')
+                && getAfter(/databases/$(database)/documents/rides/$(resource.data.rideId)).data.status == 'cancelled')
             || get(/databases/$(database)/documents/rides/$(resource.data.rideId)).data.status == 'completed'
             || (get(/databases/$(database)/documents/rides/$(resource.data.rideId)).data.status == 'on_the_way'
                 && get(/databases/$(database)/documents/rides/$(resource.data.rideId)).data.startedAt <= request.time - duration.value(6, 'h')));
@@ -272,6 +304,23 @@ service cloud.firestore {
         && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'driver'
         && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.blocked == false
         && get(/databases/$(database)/documents/drivers/$(request.auth.uid)).data.approvalStatus == 'approved';
+    }
+
+    // A ride that goes back to the open list: the driver and everything he added
+    // (fare, offers, agreement, his details) are cleared, and the status is "requested" again.
+    function isReopened(after, before) {
+      return after.diff(before).affectedKeys().hasOnly(['status', 'driverId', 'fare', 'counterOffer', 'counterAnswer', 'fareAgreed', 'driverName', 'vehicleType', 'plateNumber', 'driverContact', 'acceptedAt'])
+        && after.status == 'requested'
+        && after.driverId == null
+        && after.fare == null
+        && after.counterOffer == null
+        && after.get('counterAnswer', null) == null
+        && after.get('fareAgreed', null) == null
+        && after.get('driverName', null) == null
+        && after.get('vehicleType', null) == null
+        && after.get('plateNumber', null) == null
+        && after.get('driverContact', null) == null
+        && after.get('acceptedAt', null) == null;
     }
 
     function isActiveStudent() {
@@ -292,7 +341,7 @@ service cloud.firestore {
 
     function isNewRide(d) {
       return d.keys().hasOnly(['studentId', 'driverId', 'pickup', 'dropoff', 'fare', 'counterOffer', 'status', 'neededBy', 'expiresAt', 'createdAt', 'deleteAfter'])
-        && d.keys().hasAll(['studentId', 'driverId', 'pickup', 'dropoff', 'fare', 'counterOffer', 'status', 'neededBy', 'expiresAt', 'createdAt', 'deleteAfter'])
+        && d.keys().hasAll(['studentId', 'driverId', 'pickup', 'dropoff', 'fare', 'counterOffer', 'status', 'expiresAt', 'createdAt', 'deleteAfter'])
         && d.studentId == request.auth.uid
         && d.driverId == null
         && d.fare == null
@@ -305,8 +354,9 @@ service cloud.firestore {
         && d.expiresAt is timestamp
         && d.expiresAt > request.time
         && d.expiresAt <= request.time + duration.value(1455, 'm')
-        // "Needed by" is optional, and must fall inside the open time.
-        && (d.neededBy == null || (d.neededBy is timestamp && d.neededBy <= d.expiresAt))
+        // "Needed by" was removed. Old rides have it, and a page that is not updated yet
+        // may still send it as empty; nothing else is allowed in it.
+        && (!('neededBy' in d) || d.neededBy == null)
         // The record is kept for about 30 days (the tidy-up step comes later).
         && d.deleteAfter is timestamp
         && d.deleteAfter > request.time + duration.value(29, 'd')

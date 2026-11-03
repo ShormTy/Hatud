@@ -4,6 +4,7 @@ import { requireRole, logOut } from "./session.js";
 import { db } from "./firebase.js";
 import { makeCaps } from "./caps.js";
 import { addReportControls, loadReported } from "./report.js";
+import { confirmBox } from "./dialog.js";
 import {
   doc,
   getDoc,
@@ -177,7 +178,13 @@ async function accept(id, fareText) {
     say("Please type the fare in whole pesos, from 1 to 5000.");
     return;
   }
-  if (!window.confirm("Accept this ride for ₱" + fare + "?")) return;
+  const ok = await confirmBox({
+    title: "Accept this ride for ₱" + fare + "?",
+    message: "No other driver can take it once you accept. The student then agrees to the fare, makes one counter-offer, or declines.",
+    okText: "Accept ride",
+    cancelText: "Not yet"
+  });
+  if (!ok) return;
 
   try {
     // The first driver to get here wins. If someone else accepted a moment
@@ -285,7 +292,6 @@ function renderList() {
         ? "about " + road.tripKm.toFixed(1) + " km by road (about " + Math.max(1, Math.round(road.tripMin)) + " min)"
         : "about " + km.toFixed(1) + " km in a straight line"
     ));
-    if (data.neededBy) card.appendChild(line("Needed by:", whenText(data.neededBy.toDate())));
     card.appendChild(line("Open until:", whenText(data.expiresAt.toDate())));
 
     const show = document.createElement("button");
@@ -529,11 +535,20 @@ function stopTracking() {
 async function advance(id, status) {
   say("");
   const button = byId("advance");
-  if (status === "on_the_way") {
-    if (!window.confirm("Tap OK when you are leaving for the pickup. The student can no longer cancel after this.")) return;
-  } else if (!window.confirm("Mark this ride as completed?")) {
-    return;
-  }
+  const ok = await confirmBox(status === "on_the_way"
+    ? {
+        title: "Leave for the pickup now?",
+        message: "Tap Yes when you are leaving. After this the student can cancel only if you have not arrived within 10 minutes.",
+        okText: "Yes, I’m on the way",
+        cancelText: "Not yet"
+      }
+    : {
+        title: "Mark this ride as completed?",
+        message: "Do this when the student has been dropped off and the fare is paid.",
+        okText: "Yes, completed",
+        cancelText: "Not yet"
+      });
+  if (!ok) return;
   button.disabled = true;
   try {
     await updateDoc(doc(db, "rides", id),
@@ -542,7 +557,52 @@ async function advance(id, status) {
         : { status: "completed", completedAt: serverTimestamp() });
     // The live listener redraws the panel.
   } catch (error) {
-    say(friendlyError(error));
+    say(error.code === "permission-denied"
+      ? "That was refused. The student may not have agreed to the fare yet, or the ride changed."
+      : friendlyError(error));
+  } finally {
+    button.disabled = false;
+  }
+}
+
+// What a ride looks like when it goes back to the open list.
+const REOPEN = {
+  status: "requested",
+  driverId: null,
+  fare: null,
+  counterOffer: null,
+  counterAnswer: null,
+  fareAgreed: null,
+  driverName: null,
+  vehicleType: null,
+  plateNumber: null,
+  driverContact: null,
+  acceptedAt: null
+};
+let releasedByMe = false;
+
+// The driver gives the ride back (before "On the way"): other drivers can accept it.
+async function releaseRide(id) {
+  say("");
+  const ok = await confirmBox({
+    title: "Release this ride?",
+    message: "The request goes back to the open list for other drivers, and you will no longer see the student’s details. Release it only if you can’t take this ride.",
+    okText: "Yes, release",
+    cancelText: "Keep the ride",
+    danger: true
+  });
+  if (!ok) return;
+  const button = byId("release");
+  button.disabled = true;
+  releasedByMe = true;
+  try {
+    await updateDoc(doc(db, "rides", id), REOPEN);
+    say("You released the ride. It is open for other drivers again.");
+  } catch (error) {
+    releasedByMe = false;
+    say(error.code === "permission-denied"
+      ? "That was refused. The ride may have changed (for example the student cancelled)."
+      : friendlyError(error));
   } finally {
     button.disabled = false;
   }
@@ -561,10 +621,20 @@ function isCounterPending(data) {
 
 async function answerCounter(id, accept, offer) {
   say("");
-  const question = accept
-    ? "Accept the student’s offer of ₱" + offer + "? The fare will change to ₱" + offer + "."
-    : "Keep your fare and say no to the offer?";
-  if (!window.confirm(question)) return;
+  const ok = await confirmBox(accept
+    ? {
+        title: "Accept the offer of ₱" + offer + "?",
+        message: "The fare will change to ₱" + offer + " and the student does not need to agree again.",
+        okText: "Accept ₱" + offer,
+        cancelText: "Not yet"
+      }
+    : {
+        title: "Keep your fare?",
+        message: "You say no to the offer. The student can then agree to your fare, or decline and look for another driver.",
+        okText: "Keep my fare",
+        cancelText: "Not yet"
+      });
+  if (!ok) return;
   const accepted = byId("counter-accept");
   const kept = byId("counter-keep");
   accepted.disabled = true;
@@ -669,6 +739,11 @@ async function renderCurrent() {
     const gone = myRides.find((r) => r.id === currentId);
     if (gone && gone.data.status === "cancelled") say("The student cancelled the ride.");
     if (gone && gone.data.status === "completed") say("Ride completed. Thank you!");
+    // The ride is no longer in his list: the student declined the fare (or he released it himself).
+    if (!gone && !releasedByMe) {
+      say("The student declined the fare, so the ride is no longer yours. It is open for other drivers again.");
+    }
+    releasedByMe = false;
   }
 
   byId("current").classList.toggle("hidden", !active);
@@ -687,23 +762,33 @@ async function renderCurrent() {
     renderList(); // the numbered request pins come back
     return;
   }
-  // The status line and the button follow the ride's status every time.
+  // The status line and the buttons follow the ride's status every time.
   const underway = active.data.status === "on_the_way";
+  // "I'm on the way" unlocks only when the student agreed to the fare (or the driver accepted his offer).
+  const agreed = active.data.fareAgreed === true || active.data.counterAnswer === "accepted";
+  const counterPending = isCounterPending(active.data);
+
   byId("current-status").textContent = underway
     ? "You are on the way. Tap Completed when the ride is done."
-    : "Accepted. The student can still cancel until you tap I’m on the way.";
+    : agreed
+      ? "The student agreed to the fare. You can leave for the pickup."
+      : "Accepted. Waiting for the student to agree to the fare. You can’t leave until he agrees.";
   byId("advance").textContent = underway ? "Completed" : "I’m on the way";
   byId("advance").onclick = () => advance(active.id, underway ? "completed" : "on_the_way");
+  byId("advance").disabled = !underway && !agreed;
   byId("current-hint").textContent = underway
     ? ""
-    : "Tap the button when you leave for the pickup.";
+    : counterPending
+      ? "First answer the student’s counter-offer above."
+      : agreed
+        ? "Tap the button when you leave for the pickup."
+        : "If the student does not answer, you can release the ride for other drivers.";
+  byId("release").classList.toggle("hidden", underway);
+  byId("release").onclick = () => releaseRide(active.id);
 
   // The fare and a counter-offer can change while the ride is open, so they follow the ride every time.
   byId("current-fare").textContent = "₱" + active.data.fare;
   renderCounter(active);
-  const counterPending = isCounterPending(active.data);
-  byId("advance").disabled = counterPending;
-  if (counterPending) byId("current-hint").textContent = "First answer the student’s counter-offer above.";
 
   if (currentId === active.id) return; // the details below are already shown
   currentId = active.id;
@@ -845,9 +930,15 @@ async function saveVehicle() {
     return;
   }
   // An approved driver goes back to "pending" when he changes these: the owner checks again.
-  if (vehicle.approvalStatus === "approved"
-      && !window.confirm("Are you sure? Changing your vehicle or plate number puts your account back to pending. You will not see or accept ride requests until the owner checks your vehicle again.")) {
-    return;
+  if (vehicle.approvalStatus === "approved") {
+    const ok = await confirmBox({
+      title: "Are you sure?",
+      message: "Changing your vehicle or plate number puts your account back to pending. You will not see or accept ride requests until the owner checks your vehicle again.",
+      okText: "Yes, change it",
+      cancelText: "No, keep it",
+      danger: true
+    });
+    if (!ok) return;
   }
   const button = byId("vehicle-save");
   button.disabled = true;

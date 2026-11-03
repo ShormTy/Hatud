@@ -3,6 +3,7 @@
 import { requireRole, logOut } from "./session.js";
 import { db } from "./firebase.js";
 import { addReportControls, loadReported } from "./report.js";
+import { confirmBox } from "./dialog.js";
 import {
   doc,
   collection,
@@ -38,6 +39,9 @@ let active = "pickup";   // which pin the next tap sets
 let planning = true;     // false while an open request is shown
 let fixedPins = [];      // pins of the open request (not draggable)
 let stopWatching = null; // stops the live listening on the open request
+let lastStatus = null;   // the status of the open request the last time the page saw it
+let cancelTimer = null;  // shows the late-cancel button once 10 minutes have passed
+const CANCEL_AFTER_MS = 10 * 60 * 1000;
 
 function say(text) {
   note.textContent = text;
@@ -186,25 +190,6 @@ async function sendRequest() {
   const minutes = Number(expiryInput.value);
   const expiresAt = new Date(now + minutes * 60 * 1000);
 
-  let neededBy = null;
-  const neededValue = byId("needed-by").value;
-  if (neededValue) {
-    const wanted = new Date(neededValue);
-    if (Number.isNaN(wanted.getTime())) {
-      say("Please check the “needed by” time.");
-      return;
-    }
-    if (wanted.getTime() < now - 60 * 1000) {
-      say("The “needed by” time has already passed.");
-      return;
-    }
-    if (wanted.getTime() > expiresAt.getTime()) {
-      say("Your “needed by” time is later than the time your request stays open. Move the slider or the time.");
-      return;
-    }
-    neededBy = Timestamp.fromDate(wanted);
-  }
-
   requestButton.disabled = true;
   try {
     const rideRef = doc(collection(db, "rides"));
@@ -217,7 +202,6 @@ async function sendRequest() {
       fare: null,
       counterOffer: null,
       status: "requested",
-      neededBy,
       expiresAt: Timestamp.fromDate(expiresAt),
       createdAt: serverTimestamp(),
       deleteAfter: Timestamp.fromDate(new Date(now + 30 * DAY_MS))
@@ -236,7 +220,6 @@ async function sendRequest() {
 
     byId("pickup-label").value = "";
     byId("dropoff-label").value = "";
-    byId("needed-by").value = "";
     await showCurrentState();
   } catch (error) {
     say(friendlyError(error));
@@ -268,9 +251,26 @@ function placeText(point, fallback) {
   return point.label ? point.label : fallback;
 }
 
-// ---------- Counter-offer (one time only) ----------
-// After a driver accepts with a fare, the student can send ONE lower price.
-// The driver then accepts it (the fare changes) or keeps his fare.
+// ---------- The fare: agree, one counter-offer, or decline ----------
+// After a driver accepts with a fare, the student must agree to the final fare before
+// the driver can tap "I'm on the way". Before agreeing he can send ONE lower price
+// (the driver accepts it or keeps his fare), or decline and let other drivers accept.
+
+// What a ride looks like when it goes back to the open list.
+const REOPEN = {
+  status: "requested",
+  driverId: null,
+  fare: null,
+  counterOffer: null,
+  counterAnswer: null,
+  fareAgreed: null,
+  driverName: null,
+  vehicleType: null,
+  plateNumber: null,
+  driverContact: null,
+  acceptedAt: null
+};
+let reopenNote = ""; // why the ride went back to the open list, when the student did it himself
 
 function showCounter(rideId, ride, accepted) {
   const box = byId("counter-box");
@@ -278,22 +278,46 @@ function showCounter(rideId, ride, accepted) {
   const text = byId("counter-text");
   const sent = ride.counterOffer !== null && ride.counterOffer !== undefined;
   const answer = ride.counterAnswer || null;
-  const show = accepted || (sent && ride.status === "on_the_way");
+  const agreed = ride.fareAgreed === true;
+  const underway = ride.status === "on_the_way";
+  const show = accepted || underway;
 
   box.classList.toggle("hidden", !show);
-  form.classList.toggle("hidden", !(accepted && !sent));
   if (!show) return;
 
-  if (!sent) {
-    text.textContent = "Fare too high? You can send one counter-offer. The driver can accept it or keep his fare. You can also cancel.";
-  } else if (!answer) {
-    text.textContent = "You offered ₱" + ride.counterOffer + ". Waiting for the driver to answer.";
+  const bothAgreed = agreed || answer === "accepted";
+  const canAgree = accepted && !bothAgreed && (!sent || !!answer);
+  const canDecline = accepted && !bothAgreed;
+  form.classList.toggle("hidden", !(accepted && !sent && !bothAgreed));
+  byId("agree-actions").classList.toggle("hidden", !(canAgree || canDecline));
+  byId("agree-fare").classList.toggle("hidden", !canAgree);
+  byId("decline-fare").classList.toggle("hidden", !canDecline);
+
+  if (underway) {
+    text.textContent = "Agreed fare: ₱" + ride.fare + " (cash).";
+  } else if (agreed) {
+    text.textContent = "You agreed to ₱" + ride.fare + ". Waiting for the driver to leave for your pickup. You can still cancel until he taps I’m on the way.";
   } else if (answer === "accepted") {
-    text.textContent = "The driver accepted your offer. The fare is now ₱" + ride.fare + ".";
+    text.textContent = "The driver accepted your offer. The fare is now ₱" + ride.fare + " and you are all set. Waiting for the driver to leave for your pickup.";
+  } else if (!sent) {
+    text.textContent = "The driver’s fare is ₱" + ride.fare + ". Agree to it, send one lower offer, or decline to look for another driver. The driver can’t leave until you agree.";
+  } else if (!answer) {
+    text.textContent = "You offered ₱" + ride.counterOffer + ". Waiting for the driver to answer. You can also decline to look for another driver.";
   } else {
-    text.textContent = "The driver kept the fare at ₱" + ride.fare + " (you offered ₱" + ride.counterOffer + "). You can go ahead, or cancel the request. You can also call or text the driver.";
+    text.textContent = "The driver kept the fare at ₱" + ride.fare + " (you offered ₱" + ride.counterOffer + "). Agree to ₱" + ride.fare + ", or decline to look for another driver.";
   }
+
   byId("counter-send").onclick = () => sendCounter(rideId, ride.fare);
+  byId("agree-fare").textContent = "Agree to ₱" + ride.fare;
+  byId("agree-fare").onclick = () => agreeFare(rideId, ride.fare);
+  byId("decline-fare").onclick = () => declineFare(rideId);
+}
+
+function refusedMessage(error) {
+  if (error.code === "permission-denied") {
+    return "That was refused. The ride may have changed (for example the driver left, or you already answered). Please look at the ride details.";
+  }
+  return friendlyError(error);
 }
 
 async function sendCounter(rideId, fare) {
@@ -308,7 +332,13 @@ async function sendCounter(rideId, fare) {
     say("Your offer must be lower than the driver’s fare of ₱" + fare + ".");
     return;
   }
-  if (!window.confirm("Send ₱" + offer + " as your counter-offer? You can send only one.")) return;
+  const ok = await confirmBox({
+    title: "Send ₱" + offer + " as your offer?",
+    message: "You can send only one counter-offer. The driver will accept it or keep his fare of ₱" + fare + ".",
+    okText: "Send offer",
+    cancelText: "Not now"
+  });
+  if (!ok) return;
 
   const button = byId("counter-send");
   button.disabled = true;
@@ -317,11 +347,50 @@ async function sendCounter(rideId, fare) {
     input.value = "";
     // The live listener redraws the panel.
   } catch (error) {
-    if (error.code === "permission-denied") {
-      say("The offer was refused. The ride may have changed (for example the driver already left, or you already sent an offer). Please look at the ride details.");
-    } else {
-      say(friendlyError(error));
-    }
+    say(refusedMessage(error));
+  } finally {
+    button.disabled = false;
+  }
+}
+
+async function agreeFare(rideId, fare) {
+  say("");
+  const ok = await confirmBox({
+    title: "Agree to ₱" + fare + "?",
+    message: "After you agree, the driver can leave for your pickup. You can still cancel until he taps I’m on the way.",
+    okText: "Yes, agree",
+    cancelText: "Not yet"
+  });
+  if (!ok) return;
+  const button = byId("agree-fare");
+  button.disabled = true;
+  try {
+    await updateDoc(doc(db, "rides", rideId), { fareAgreed: true });
+  } catch (error) {
+    say(refusedMessage(error));
+  } finally {
+    button.disabled = false;
+  }
+}
+
+async function declineFare(rideId) {
+  say("");
+  const ok = await confirmBox({
+    title: "Decline this driver?",
+    message: "Your request will open again so other drivers can accept it. This driver will not have your ride anymore.",
+    okText: "Yes, decline",
+    cancelText: "Keep this driver",
+    danger: true
+  });
+  if (!ok) return;
+  const button = byId("decline-fare");
+  button.disabled = true;
+  reopenNote = "You declined the driver. Your request is open again for other drivers.";
+  try {
+    await updateDoc(doc(db, "rides", rideId), REOPEN);
+  } catch (error) {
+    reopenNote = "";
+    say(refusedMessage(error));
   } finally {
     button.disabled = false;
   }
@@ -345,15 +414,26 @@ function showActive(rideId, ride) {
   const accepted = ride.status === "accepted";
   const underway = ride.status === "on_the_way";
   const hasDriver = accepted || underway;
+  // After the driver taps "I'm on the way", the student can cancel only when 10 minutes have passed.
+  const waitedMs = underway && ride.startedAt ? Date.now() - ride.startedAt.toDate().getTime() : 0;
+  const canCancelLate = underway && waitedMs >= CANCEL_AFTER_MS;
+  clearTimeout(cancelTimer);
+  if (underway && ride.startedAt && !canCancelLate) {
+    cancelTimer = setTimeout(() => showActive(rideId, ride), CANCEL_AFTER_MS - waitedMs + 1000);
+  }
+
   byId("active-status").textContent = ride.status === "requested"
     ? "Waiting for a driver to accept."
     : accepted
-      ? "A driver accepted your request. If the fare is not OK for you, you can send one counter-offer or cancel."
+      ? "A driver accepted your request. Please check the fare below. The driver can’t leave until you agree."
       : underway
-        ? "Your driver is on the way. You can’t cancel here anymore; please call or text the driver if something changed."
+        ? (canCancelLate
+            ? "Your driver is on the way, but it has been over 10 minutes. If he is not coming, you can cancel. You can also call or text him first."
+            : "Your driver is on the way. Please call or text him if something changed. You can cancel if he has not arrived after 10 minutes.")
         : "Status: " + ride.status;
   byId("driver-box").classList.toggle("hidden", !hasDriver);
-  byId("cancel").classList.toggle("hidden", underway);
+  byId("cancel").classList.toggle("hidden", underway && !canCancelLate);
+  byId("cancel").textContent = underway ? "Driver is not here? Cancel the ride" : "Cancel request";
   if (hasDriver) {
     byId("driver-fare").textContent = "₱" + ride.fare;
     byId("driver-name").textContent = ride.driverName;
@@ -366,12 +446,9 @@ function showActive(rideId, ride) {
   byId("active-from").textContent = placeText(ride.pickup, "Pin A on the map");
   byId("active-to").textContent = placeText(ride.dropoff, "Pin B on the map");
   byId("active-until").textContent = whenText(ride.expiresAt.toDate());
-  const neededLine = byId("active-needed-line");
-  neededLine.classList.toggle("hidden", !ride.neededBy);
-  if (ride.neededBy) byId("active-needed").textContent = whenText(ride.neededBy.toDate());
 
-  byId("cancel").disabled = ride.status !== "requested" && !accepted;
-  byId("cancel").onclick = () => cancelRide(rideId);
+  byId("cancel").disabled = ride.status !== "requested" && !accepted && !canCancelLate;
+  byId("cancel").onclick = () => cancelRide(rideId, underway);
 }
 
 // Marks the request as finished and frees the student to make a new one.
@@ -382,8 +459,23 @@ async function endRide(rideId, newStatus) {
   await batch.commit();
 }
 
-async function cancelRide(rideId) {
-  if (!window.confirm("Cancel this ride request?")) return;
+async function cancelRide(rideId, underway) {
+  const ok = await confirmBox(underway
+    ? {
+        title: "Cancel the ride?",
+        message: "The driver said he is on the way. Cancel only if he is not coming. You can report a problem afterwards.",
+        okText: "Yes, cancel the ride",
+        cancelText: "No, keep it",
+        danger: true
+      }
+    : {
+        title: "Cancel this ride request?",
+        message: "Your request will be closed. You can make a new one anytime.",
+        okText: "Yes, cancel",
+        cancelText: "No, keep it",
+        danger: true
+      });
+  if (!ok) return;
   say("");
   byId("cancel").disabled = true;
   try {
@@ -455,6 +547,7 @@ async function showCurrentState() {
       // The server did not agree it has expired yet (for example a wrong phone clock). Show it as open.
     }
   }
+  lastStatus = ride.status;
   showActive(rideId, ride);
 
   // Keep the page up to date (for example when a driver accepts).
@@ -465,6 +558,12 @@ async function showCurrentState() {
       const latest = snap.data();
       if (!latest) return;
       if (latest.status === "requested" || latest.status === "accepted" || latest.status === "on_the_way") {
+        // The ride went back to the open list: say why.
+        if (lastStatus === "accepted" && latest.status === "requested") {
+          say(reopenNote || "The driver left the ride, so your request is open again for other drivers.");
+          reopenNote = "";
+        }
+        lastStatus = latest.status;
         showActive(rideId, latest);
       } else if (latest.status === "completed") {
         if (stopWatching) { stopWatching(); stopWatching = null; }

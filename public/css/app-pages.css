@@ -111,3 +111,30 @@ input[type="datetime-local"] { min-height: 46px; }
   font-family: inherit;
   resize: vertical;
 }
+
+/* Confirmation popup (js/dialog.js) */
+.dialog-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 2000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 16px;
+  background: rgba(0, 0, 0, 0.55);
+}
+.dialog-box {
+  width: 100%;
+  max-width: 380px;
+  padding: 18px;
+  border: 1px solid var(--line);
+  border-radius: 16px;
+  background: var(--card);
+  color: var(--text);
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.4);
+}
+.dialog-title { margin: 0 0 8px; font-size: 18px; font-weight: 600; }
+.dialog-message { margin: 0 0 16px; font-size: 15px; line-height: 1.45; color: var(--muted); }
+.dialog-buttons { display: flex; gap: 10px; }
+.dialog-buttons button { flex: 1; margin: 0; }
+.primary.danger { background: #b91c1c; color: #ffffff; }

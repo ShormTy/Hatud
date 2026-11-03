@@ -62,9 +62,6 @@
     <label for="expiry">Keep my request open for <strong id="expiry-text">1 hour</strong></label>
     <input id="expiry" type="range" min="30" max="1440" step="30" value="60">
 
-    <label for="needed-by">Needed by (optional)</label>
-    <input id="needed-by" type="datetime-local">
-
     <button class="primary" id="request" type="button">Request ride</button>
     <button class="secondary" id="clear" type="button">Clear pins</button>
   </section>
@@ -89,8 +86,11 @@
         <input id="counter-input" type="number" inputmode="numeric" min="1" step="1" placeholder="For example 40">
         <button class="secondary" id="counter-send" type="button">Send counter-offer</button>
       </div>
+      <div id="agree-actions" class="hidden">
+        <button class="primary" id="agree-fare" type="button"></button>
+        <button class="secondary" id="decline-fare" type="button">Decline and find another driver</button>
+      </div>
     </div>
-    <p class="ride-line hidden" id="active-needed-line"><strong>Needed by:</strong> <span id="active-needed"></span></p>
     <button class="secondary" id="cancel" type="button">Cancel request</button>
   </section>
 
