@@ -93,18 +93,57 @@ service cloud.firestore {
       // Expired-but-unclosed requests are hidden by the driver's page, not by the rules
       // (rules cannot compare a query against the phone's clock).
       allow read: if isSelf(resource.data.studentId)
+        || isSelf(resource.data.driverId)
         || (resource.data.status == 'requested' && isApprovedDriver());
       allow create: if isActiveStudent()
         && isNewRide(request.resource.data)
         && existsAfter(/databases/$(database)/documents/locks/$(request.auth.uid))
         && getAfter(/databases/$(database)/documents/locks/$(request.auth.uid)).data.rideId == rideId;
-      // The student can only cancel his own open request, or close it once it
-      // has really run out of time. Nothing else may change from the student's side.
+      // The student can cancel his own request while it is open or accepted (the
+      // "On the way" button will close this window in the next step), or close it
+      // once it has really run out of time. Nothing else may change from his side.
       allow update: if isSelf(resource.data.studentId)
-        && resource.data.status == 'requested'
         && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status'])
-        && (request.resource.data.status == 'cancelled'
-            || (request.resource.data.status == 'expired' && resource.data.expiresAt <= request.time));
+        && ((resource.data.status in ['requested', 'accepted'] && request.resource.data.status == 'cancelled')
+            || (resource.data.status == 'requested'
+                && request.resource.data.status == 'expired'
+                && resource.data.expiresAt <= request.time));
+
+      // An approved driver accepts a request that is still open and not expired,
+      // and types the fare. The first write wins: after it, the status is no longer
+      // "requested", so every later accept is refused. His name, vehicle and contact
+      // number are copied from his own records (the rules check they match).
+      allow update: if isApprovedDriver()
+        && resource.data.status == 'requested'
+        && resource.data.expiresAt > request.time
+        && request.resource.data.diff(resource.data).affectedKeys()
+             .hasOnly(['status', 'driverId', 'fare', 'driverName', 'vehicleType', 'plateNumber', 'driverContact', 'acceptedAt'])
+        && request.resource.data.status == 'accepted'
+        && request.resource.data.driverId == request.auth.uid
+        && request.resource.data.fare is int
+        && request.resource.data.fare >= 1
+        && request.resource.data.fare <= 5000
+        && request.resource.data.acceptedAt == request.time
+        && request.resource.data.driverName == get(/databases/$(database)/documents/users/$(request.auth.uid)).data.name
+        && request.resource.data.vehicleType == get(/databases/$(database)/documents/drivers/$(request.auth.uid)).data.vehicleType
+        && request.resource.data.plateNumber == get(/databases/$(database)/documents/drivers/$(request.auth.uid)).data.plateNumber
+        && request.resource.data.driverContact == get(/databases/$(database)/documents/drivers/$(request.auth.uid)).data.contactNumber;
+
+      // The student's name and contact number live in a small private record next
+      // to the ride, so drivers cannot see them before accepting.
+      match /private/{docId} {
+        allow read: if docId == 'student'
+          && (isSelf(get(/databases/$(database)/documents/rides/$(rideId)).data.studentId)
+              || (get(/databases/$(database)/documents/rides/$(rideId)).data.driverId == request.auth.uid
+                  && get(/databases/$(database)/documents/rides/$(rideId)).data.status == 'accepted'));
+        allow create: if docId == 'student'
+          && isSelf(getAfter(/databases/$(database)/documents/rides/$(rideId)).data.studentId)
+          && !exists(/databases/$(database)/documents/rides/$(rideId))
+          && request.resource.data.keys().hasOnly(['name', 'contactNumber'])
+          && request.resource.data.keys().hasAll(['name', 'contactNumber'])
+          && request.resource.data.name == get(/databases/$(database)/documents/users/$(request.auth.uid)).data.name
+          && request.resource.data.contactNumber == get(/databases/$(database)/documents/users/$(request.auth.uid)).data.contactNumber;
+      }
     }
 
     // ---- locks: one per student while a request is open ----
@@ -120,7 +159,7 @@ service cloud.firestore {
         && getAfter(/databases/$(database)/documents/rides/$(request.resource.data.rideId)).data.studentId == uid;
       // The lock can go only in the same batch that cancels or expires the ride.
       allow delete: if isSelf(uid)
-        && get(/databases/$(database)/documents/rides/$(resource.data.rideId)).data.status == 'requested'
+        && get(/databases/$(database)/documents/rides/$(resource.data.rideId)).data.status in ['requested', 'accepted']
         && getAfter(/databases/$(database)/documents/rides/$(resource.data.rideId)).data.status in ['cancelled', 'expired'];
     }
 

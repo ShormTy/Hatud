@@ -1,5 +1,5 @@
-// Driver page: an approved driver sees a live list of open ride requests.
-// (Accepting a request, with a fare, comes in the next step.)
+// Driver page: an approved driver sees a live list of open ride requests,
+// accepts one by typing a fare, and then sees the student's details.
 import { requireRole, logOut } from "./session.js";
 import { db } from "./firebase.js";
 import {
@@ -8,7 +8,9 @@ import {
   collection,
   query,
   where,
-  onSnapshot
+  onSnapshot,
+  runTransaction,
+  serverTimestamp
 } from "https://www.gstatic.com/firebasejs/12.3.0/firebase-firestore.js";
 
 const L = window.L; // Leaflet, loaded by driver.html
@@ -17,12 +19,23 @@ const byId = (id) => document.getElementById(id);
 const TAGBILARAN = [9.6472, 123.855];
 
 const status = byId("status");
+const note = byId("note");
+let me = null;           // { user, profile }
+let vehicle = null;      // this driver's record (vehicle type, plate, contact)
 let map = null;
 let shownPins = [];
 let rides = [];          // open requests as last received: [{ id, data }]
+let myRides = [];        // rides this driver has accepted: [{ id, data }]
 let selectedId = null;
+let currentId = null;    // the ride shown in "Your current ride"
+const typedFares = {};   // what the driver typed per request, kept while the list redraws
 
 byId("signout").addEventListener("click", () => logOut());
+
+function say(text) {
+  note.textContent = text;
+  note.classList.toggle("hidden", !text);
+}
 
 // ---------- Map ----------
 
@@ -59,7 +72,7 @@ function showOnMap(ride) {
   map.fitBounds(L.latLngBounds([from, to]), { padding: [40, 40], maxZoom: 17 });
 }
 
-// ---------- The list ----------
+// ---------- Helpers ----------
 
 function whenText(date) {
   return date.toLocaleString([], { weekday: "short", hour: "numeric", minute: "2-digit" });
@@ -79,6 +92,62 @@ function line(label, text) {
   return p;
 }
 
+function friendlyError(error) {
+  switch (error.code) {
+    case "taken":
+    case "permission-denied":
+      return "Sorry, this request was already taken, cancelled, or has run out of time.";
+    case "unavailable":
+    case "network-request-failed":
+      return "No internet connection. Please try again.";
+    default:
+      return "Something went wrong (" + (error.code || "unknown") + "). Please try again.";
+  }
+}
+
+// ---------- Accepting a request ----------
+
+async function accept(id, fareText) {
+  say("");
+  const fare = Number(fareText);
+  if (!fareText || !Number.isInteger(fare) || fare < 1 || fare > 5000) {
+    say("Please type the fare in whole pesos, from 1 to 5000.");
+    return;
+  }
+  if (!window.confirm("Accept this ride for ₱" + fare + "?")) return;
+
+  try {
+    // The first driver to get here wins. If someone else accepted a moment
+    // earlier, the status is no longer "requested" and this stops.
+    await runTransaction(db, async (transaction) => {
+      const ref = doc(db, "rides", id);
+      const snap = await transaction.get(ref);
+      const ride = snap.exists() ? snap.data() : null;
+      if (!ride || ride.status !== "requested" || ride.expiresAt.toDate().getTime() <= Date.now()) {
+        const taken = new Error("taken");
+        taken.code = "taken";
+        throw taken;
+      }
+      transaction.update(ref, {
+        status: "accepted",
+        driverId: me.user.uid,
+        fare,
+        driverName: me.profile.name,
+        vehicleType: vehicle.vehicleType,
+        plateNumber: vehicle.plateNumber,
+        driverContact: vehicle.contactNumber,
+        acceptedAt: serverTimestamp()
+      });
+    });
+    delete typedFares[id];
+    // The live listener below now shows "Your current ride".
+  } catch (error) {
+    say(friendlyError(error));
+  }
+}
+
+// ---------- The open list ----------
+
 function renderList() {
   const now = Date.now();
   // Hide requests that ran out of time but were not closed yet. Oldest deadline first.
@@ -92,7 +161,7 @@ function renderList() {
 
   if (selectedId && !open.some((r) => r.id === selectedId)) {
     selectedId = null;
-    clearPins();
+    if (!currentId) clearPins();
   }
 
   open.forEach(({ id, data }) => {
@@ -110,53 +179,143 @@ function renderList() {
     if (data.neededBy) card.appendChild(line("Needed by:", whenText(data.neededBy.toDate())));
     card.appendChild(line("Open until:", whenText(data.expiresAt.toDate())));
 
-    const button = document.createElement("button");
-    button.type = "button";
-    button.className = "secondary";
-    button.textContent = "Show on map";
-    button.addEventListener("click", () => {
+    const show = document.createElement("button");
+    show.type = "button";
+    show.className = "secondary";
+    show.textContent = "Show on map";
+    show.addEventListener("click", () => {
       selectedId = id;
       showOnMap(data);
       renderList();
       byId("map").scrollIntoView({ behavior: "smooth", block: "start" });
     });
-    card.appendChild(button);
+    card.appendChild(show);
+
+    const label = document.createElement("label");
+    label.textContent = "Your fare in pesos (cash)";
+    const fareInput = document.createElement("input");
+    fareInput.type = "number";
+    fareInput.inputMode = "numeric";
+    fareInput.min = "1";
+    fareInput.max = "5000";
+    fareInput.step = "1";
+    fareInput.placeholder = "For example 50";
+    fareInput.value = typedFares[id] || "";
+    fareInput.addEventListener("input", () => { typedFares[id] = fareInput.value; });
+    label.appendChild(fareInput);
+    card.appendChild(label);
+
+    const acceptButton = document.createElement("button");
+    acceptButton.type = "button";
+    acceptButton.className = "primary";
+    acceptButton.textContent = "Accept ride";
+    acceptButton.addEventListener("click", async () => {
+      acceptButton.disabled = true;
+      await accept(id, fareInput.value.trim());
+      acceptButton.disabled = false;
+    });
+    card.appendChild(acceptButton);
 
     box.appendChild(card);
   });
 }
 
+// ---------- Current ride ----------
+
+async function renderCurrent() {
+  const active = myRides.find((r) => r.data.status === "accepted");
+
+  // A ride this driver was on has been cancelled by the student.
+  if (!active && currentId) {
+    const gone = myRides.find((r) => r.id === currentId);
+    if (gone && gone.data.status === "cancelled") say("The student cancelled the ride.");
+  }
+
+  byId("current").classList.toggle("hidden", !active);
+  byId("open-area-list").classList.toggle("hidden", !!active);
+
+  if (!active) {
+    currentId = null;
+    return;
+  }
+  if (currentId === active.id) return; // already shown
+  currentId = active.id;
+
+  const data = active.data;
+  byId("current-fare").textContent = "₱" + data.fare;
+  byId("current-from").textContent = placeText(data.pickup, "Pin A on the map");
+  byId("current-to").textContent = placeText(data.dropoff, "Pin B on the map");
+  byId("current-student").textContent = "Loading…";
+  byId("current-contact").textContent = "";
+  byId("current-contact").removeAttribute("href");
+  showOnMap(data);
+
+  try {
+    const snap = await getDoc(doc(db, "rides", active.id, "private", "student"));
+    if (currentId !== active.id) return;
+    if (snap.exists()) {
+      const student = snap.data();
+      byId("current-student").textContent = student.name;
+      const phone = byId("current-contact");
+      phone.textContent = student.contactNumber;
+      phone.href = "tel:" + student.contactNumber.replace(/[^0-9+]/g, "");
+    } else {
+      byId("current-student").textContent = "Details not available for this older request";
+    }
+  } catch (error) {
+    byId("current-student").textContent = "Couldn’t load the student’s details. Please refresh.";
+  }
+}
+
+// ---------- Listening ----------
+
 function startListening() {
-  const openRides = query(collection(db, "rides"), where("status", "==", "requested"));
+  const fail = () => {
+    status.textContent = "Couldn’t load the requests. Please check your internet and refresh.";
+  };
+
   onSnapshot(
-    openRides,
+    query(collection(db, "rides"), where("status", "==", "requested")),
     (snapshot) => {
       rides = snapshot.docs.map((d) => ({ id: d.id, data: d.data() }));
       renderList();
     },
-    () => {
-      status.textContent = "Couldn’t load the requests. Please check your internet and refresh.";
-    }
+    fail
   );
+
+  onSnapshot(
+    query(collection(db, "rides"), where("driverId", "==", me.user.uid)),
+    (snapshot) => {
+      myRides = snapshot.docs.map((d) => ({ id: d.id, data: d.data() }));
+      renderCurrent();
+    },
+    fail
+  );
+
   // Requests run out of time while the page stays open, so re-check every 30 seconds.
-  setInterval(renderList, 30 * 1000);
+  // (The list is not redrawn while the driver is typing a fare.)
+  setInterval(() => {
+    if (document.activeElement && document.activeElement.tagName === "INPUT") return;
+    renderList();
+  }, 30 * 1000);
 }
 
 // ---------- Start ----------
 
 requireRole("driver")
-  .then(async ({ user, profile }) => {
-    byId("hello").textContent = profile.name;
-    const snap = await getDoc(doc(db, "drivers", user.uid));
-    const driver = snap.exists() ? snap.data() : null;
+  .then(async (session) => {
+    me = session;
+    byId("hello").textContent = session.profile.name;
+    const snap = await getDoc(doc(db, "drivers", session.user.uid));
+    vehicle = snap.exists() ? snap.data() : null;
 
-    if (driver) {
-      byId("vehicle").textContent = driver.vehicleType + " • " + driver.plateNumber;
+    if (vehicle) {
+      byId("vehicle").textContent = vehicle.vehicleType + " • " + vehicle.plateNumber;
       byId("vehicle").classList.remove("hidden");
     }
 
-    if (driver && driver.approvalStatus === "approved" && profile.blocked !== true) {
-      status.textContent = "Approved. Accepting a request comes in the next step.";
+    if (vehicle && vehicle.approvalStatus === "approved" && session.profile.blocked !== true) {
+      status.textContent = "Approved. Type a fare and tap Accept ride on a request.";
       byId("open-area").classList.remove("hidden");
       startMap();
       startListening();

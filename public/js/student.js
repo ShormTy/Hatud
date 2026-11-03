@@ -6,6 +6,7 @@ import {
   doc,
   collection,
   getDoc,
+  onSnapshot,
   writeBatch,
   serverTimestamp,
   Timestamp
@@ -31,6 +32,7 @@ let dropoff = null;
 let active = "pickup";   // which pin the next tap sets
 let planning = true;     // false while an open request is shown
 let fixedPins = [];      // pins of the open request (not draggable)
+let stopWatching = null; // stops the live listening on the open request
 
 function say(text) {
   note.textContent = text;
@@ -215,6 +217,11 @@ async function sendRequest() {
       createdAt: serverTimestamp(),
       deleteAfter: Timestamp.fromDate(new Date(now + 30 * DAY_MS))
     });
+    // Name and contact number, kept private: a driver can read them only after accepting.
+    batch.set(doc(db, "rides", rideRef.id, "private", "student"), {
+      name: me.profile.name,
+      contactNumber: me.profile.contactNumber
+    });
     // This small record is what allows only one open request per student.
     batch.set(doc(db, "locks", me.user.uid), {
       rideId: rideRef.id,
@@ -271,9 +278,21 @@ function showActive(rideId, ride) {
   ];
   map.fitBounds(L.latLngBounds([from, to]), { padding: [40, 40], maxZoom: 17 });
 
+  const accepted = ride.status === "accepted";
   byId("active-status").textContent = ride.status === "requested"
     ? "Waiting for a driver to accept."
-    : "Status: " + ride.status;
+    : accepted
+      ? "A driver accepted your request. If the fare is not OK for you, you can cancel."
+      : "Status: " + ride.status;
+  byId("driver-box").classList.toggle("hidden", !accepted);
+  if (accepted) {
+    byId("driver-fare").textContent = "₱" + ride.fare;
+    byId("driver-name").textContent = ride.driverName;
+    byId("driver-vehicle").textContent = ride.vehicleType + " • " + ride.plateNumber;
+    const phone = byId("driver-contact");
+    phone.textContent = ride.driverContact;
+    phone.href = "tel:" + ride.driverContact.replace(/[^0-9+]/g, "");
+  }
   byId("active-from").textContent = placeText(ride.pickup, "Pin A on the map");
   byId("active-to").textContent = placeText(ride.dropoff, "Pin B on the map");
   byId("active-until").textContent = whenText(ride.expiresAt.toDate());
@@ -281,7 +300,7 @@ function showActive(rideId, ride) {
   neededLine.classList.toggle("hidden", !ride.neededBy);
   if (ride.neededBy) byId("active-needed").textContent = whenText(ride.neededBy.toDate());
 
-  byId("cancel").disabled = ride.status !== "requested";
+  byId("cancel").disabled = ride.status !== "requested" && !accepted;
   byId("cancel").onclick = () => cancelRide(rideId);
 }
 
@@ -299,6 +318,7 @@ async function cancelRide(rideId) {
   byId("cancel").disabled = true;
   try {
     await endRide(rideId, "cancelled");
+    if (stopWatching) { stopWatching(); stopWatching = null; }
     await showCurrentState();
   } catch (error) {
     byId("cancel").disabled = false;
@@ -336,6 +356,23 @@ async function showCurrentState() {
     }
   }
   showActive(rideId, ride);
+
+  // Keep the page up to date (for example when a driver accepts).
+  if (stopWatching) stopWatching();
+  stopWatching = onSnapshot(
+    doc(db, "rides", rideId),
+    (snap) => {
+      const latest = snap.data();
+      if (!latest) return;
+      if (latest.status === "requested" || latest.status === "accepted") {
+        showActive(rideId, latest);
+      } else {
+        if (stopWatching) { stopWatching(); stopWatching = null; }
+        showCurrentState();
+      }
+    },
+    () => say("Lost the live connection. Please refresh the page.")
+  );
 }
 
 // ---------- Start ----------

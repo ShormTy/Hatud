@@ -76,3 +76,14 @@ input[type="datetime-local"] { min-height: 46px; }
   background: var(--card);
 }
 .request-card.selected { border-color: var(--brand); }
+
+/* Accepted ride: driver details on the student page, fare field on the driver cards */
+.driver-box {
+  margin: 12px 0;
+  padding: 10px 14px;
+  border: 1px solid var(--brand);
+  border-radius: 12px;
+}
+.driver-box a, #current a { color: var(--brand); }
+.request-card label { margin-top: 12px; }
+.request-card .primary { margin-top: 10px; }

@@ -18,12 +18,23 @@
   <section class="panel">
     <p class="status hidden" id="vehicle"></p>
     <p class="status" id="status">Loading…</p>
+    <p class="hint hidden" id="note" role="alert"></p>
+  </section>
+
+  <section class="panel hidden" id="current">
+    <p class="panel-title">Your current ride</p>
+    <p class="ride-line"><strong>Fare:</strong> <span id="current-fare"></span> (cash)</p>
+    <p class="ride-line"><strong>Student:</strong> <span id="current-student"></span></p>
+    <p class="ride-line"><strong>Contact:</strong> <a id="current-contact" href="#"></a></p>
+    <p class="ride-line"><strong>From (A):</strong> <span id="current-from"></span></p>
+    <p class="ride-line"><strong>To (B):</strong> <span id="current-to"></span></p>
+    <p class="hint">The “On the way” and “Completed” buttons come in the next step. The student can still cancel for now.</p>
   </section>
 
   <!-- Shown only to approved drivers -->
   <div id="open-area" class="hidden">
     <div id="map" role="application" aria-label="Map of the selected request"></div>
-    <section class="panel">
+    <section class="panel" id="open-area-list">
       <h2 class="panel-title">Open requests</h2>
       <p class="hint" id="empty">No open requests right now. New ones appear here by themselves.</p>
       <div id="requests"></div>
