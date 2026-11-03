@@ -1,0 +1,40 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Hatud: Request a ride</title>
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css">
+  <link rel="stylesheet" href="css/app.css">
+  <link rel="stylesheet" href="css/app-pages.css">
+</head>
+<body class="app-page">
+  <header class="topbar">
+    <strong>Hatud</strong>
+    <span id="hello"></span>
+    <button class="link-button" id="signout" type="button">Sign out</button>
+  </header>
+
+  <div id="map" role="application" aria-label="Map of Tagbilaran City"></div>
+
+  <section class="panel">
+    <fieldset>
+      <legend>Tap the map to set</legend>
+      <div class="choice">
+        <label><input type="radio" name="active-pin" value="pickup" checked><span>Pickup (A)</span></label>
+        <label><input type="radio" name="active-pin" value="dropoff"><span>Drop-off (B)</span></label>
+      </div>
+    </fieldset>
+
+    <button class="secondary" id="locate" type="button">Use my location as pickup</button>
+    <p class="status" id="summary"></p>
+    <p class="hint hidden" id="note" role="alert"></p>
+
+    <button class="primary" type="button" disabled>Request ride (next step)</button>
+    <button class="secondary" id="clear" type="button">Clear pins</button>
+  </section>
+
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
+  <script type="module" src="js/student.js"></script>
+</body>
+</html>

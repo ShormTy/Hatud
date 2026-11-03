@@ -202,18 +202,8 @@ async function render(user) {
     }
 
     const profile = profileSnap.data();
-    profileTitle.textContent = "Hi, " + profile.name;
-
-    if (profile.role === "driver") {
-      const driverSnap = await getDoc(doc(db, "drivers", user.uid));
-      if (myRun !== renderRun) return;
-      const approval = driverSnap.exists() ? driverSnap.data().approvalStatus : "pending";
-      showStatus(approval === "approved"
-        ? "Driver account approved."
-        : "Waiting for approval. The owner will meet you to check your papers.");
-    } else {
-      showStatus("Student account ready. Ride requests come in the next stage.");
-    }
+    // Each role has its own page.
+    location.replace(profile.role === "driver" ? "driver.html" : "student.html");
   } catch (error) {
     if (myRun !== renderRun) return;
     profileTitle.textContent = "Signed in";
