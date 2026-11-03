@@ -6,6 +6,7 @@ import {
   doc,
   collection,
   getDoc,
+  updateDoc,
   deleteDoc,
   onSnapshot,
   writeBatch,
@@ -264,6 +265,65 @@ function placeText(point, fallback) {
   return point.label ? point.label : fallback;
 }
 
+// ---------- Counter-offer (one time only) ----------
+// After a driver accepts with a fare, the student can send ONE lower price.
+// The driver then accepts it (the fare changes) or keeps his fare.
+
+function showCounter(rideId, ride, accepted) {
+  const box = byId("counter-box");
+  const form = byId("counter-form");
+  const text = byId("counter-text");
+  const sent = ride.counterOffer !== null && ride.counterOffer !== undefined;
+  const answer = ride.counterAnswer || null;
+  const show = accepted || (sent && ride.status === "on_the_way");
+
+  box.classList.toggle("hidden", !show);
+  form.classList.toggle("hidden", !(accepted && !sent));
+  if (!show) return;
+
+  if (!sent) {
+    text.textContent = "Fare too high? You can send one counter-offer. The driver can accept it or keep his fare. You can also cancel.";
+  } else if (!answer) {
+    text.textContent = "You offered ₱" + ride.counterOffer + ". Waiting for the driver to answer.";
+  } else if (answer === "accepted") {
+    text.textContent = "The driver accepted your offer. The fare is now ₱" + ride.fare + ".";
+  } else {
+    text.textContent = "The driver kept the fare at ₱" + ride.fare + " (you offered ₱" + ride.counterOffer + "). You can go ahead, or cancel the request. You can also call or text the driver.";
+  }
+  byId("counter-send").onclick = () => sendCounter(rideId, ride.fare);
+}
+
+async function sendCounter(rideId, fare) {
+  say("");
+  const input = byId("counter-input");
+  const offer = Number(input.value);
+  if (!Number.isInteger(offer) || offer < 1) {
+    say("Please type your offer in whole pesos, for example 40.");
+    return;
+  }
+  if (offer >= fare) {
+    say("Your offer must be lower than the driver’s fare of ₱" + fare + ".");
+    return;
+  }
+  if (!window.confirm("Send ₱" + offer + " as your counter-offer? You can send only one.")) return;
+
+  const button = byId("counter-send");
+  button.disabled = true;
+  try {
+    await updateDoc(doc(db, "rides", rideId), { counterOffer: offer });
+    input.value = "";
+    // The live listener redraws the panel.
+  } catch (error) {
+    if (error.code === "permission-denied") {
+      say("The offer was refused. The ride may have changed (for example the driver already left, or you already sent an offer). Please look at the ride details.");
+    } else {
+      say(friendlyError(error));
+    }
+  } finally {
+    button.disabled = false;
+  }
+}
+
 function showActive(rideId, ride) {
   planning = false;
   resetPins();
@@ -285,7 +345,7 @@ function showActive(rideId, ride) {
   byId("active-status").textContent = ride.status === "requested"
     ? "Waiting for a driver to accept."
     : accepted
-      ? "A driver accepted your request. If the fare is not OK for you, you can cancel."
+      ? "A driver accepted your request. If the fare is not OK for you, you can send one counter-offer or cancel."
       : underway
         ? "Your driver is on the way. You can’t cancel here anymore; please call or text the driver if something changed."
         : "Status: " + ride.status;
@@ -299,6 +359,7 @@ function showActive(rideId, ride) {
     phone.textContent = ride.driverContact;
     phone.href = "tel:" + ride.driverContact.replace(/[^0-9+]/g, "");
   }
+  showCounter(rideId, ride, accepted);
   byId("active-from").textContent = placeText(ride.pickup, "Pin A on the map");
   byId("active-to").textContent = placeText(ride.dropoff, "Pin B on the map");
   byId("active-until").textContent = whenText(ride.expiresAt.toDate());

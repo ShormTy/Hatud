@@ -63,6 +63,14 @@
       <p class="ride-line"><strong>Vehicle:</strong> <span id="driver-vehicle"></span></p>
       <p class="ride-line"><strong>Contact:</strong> <a id="driver-contact" href="#"></a></p>
     </div>
+    <div class="driver-box hidden" id="counter-box">
+      <p class="ride-line" id="counter-text"></p>
+      <div id="counter-form" class="hidden">
+        <label for="counter-input">Your offer in pesos (one time only)</label>
+        <input id="counter-input" type="number" inputmode="numeric" min="1" step="1" placeholder="For example 40">
+        <button class="secondary" id="counter-send" type="button">Send counter-offer</button>
+      </div>
+    </div>
     <p class="ride-line hidden" id="active-needed-line"><strong>Needed by:</strong> <span id="active-needed"></span></p>
     <button class="secondary" id="cancel" type="button">Cancel request</button>
   </section>

@@ -109,6 +109,17 @@ service cloud.firestore {
                 && request.resource.data.status == 'expired'
                 && resource.data.expiresAt <= request.time));
 
+      // The student can send ONE counter-offer while the ride is accepted: a whole
+      // number of pesos, lower than the driver's fare. Once counterOffer is set it can
+      // never be changed again (the rule needs it to be empty), so it is one time only.
+      allow update: if isSelf(resource.data.studentId)
+        && resource.data.status == 'accepted'
+        && resource.data.counterOffer == null
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['counterOffer'])
+        && request.resource.data.counterOffer is int
+        && request.resource.data.counterOffer >= 1
+        && request.resource.data.counterOffer < resource.data.fare;
+
       // An approved driver accepts a request that is still open and not expired,
       // and types the fare. The first write wins: after it, the status is no longer
       // "requested", so every later accept is refused. His name, vehicle and contact
@@ -129,12 +140,26 @@ service cloud.firestore {
         && request.resource.data.plateNumber == get(/databases/$(database)/documents/drivers/$(request.auth.uid)).data.plateNumber
         && request.resource.data.driverContact == get(/databases/$(database)/documents/drivers/$(request.auth.uid)).data.contactNumber;
 
+      // The accepting driver answers the student's counter-offer once: either
+      // "accepted" (the fare becomes the offer) or "kept" (the fare stays).
+      allow update: if isApprovedDriver()
+        && isSelf(resource.data.driverId)
+        && resource.data.status == 'accepted'
+        && resource.data.counterOffer != null
+        && resource.data.get('counterAnswer', null) == null
+        && ((request.resource.data.diff(resource.data).affectedKeys().hasOnly(['counterAnswer'])
+             && request.resource.data.counterAnswer == 'kept')
+            || (request.resource.data.diff(resource.data).affectedKeys().hasOnly(['counterAnswer', 'fare'])
+                && request.resource.data.counterAnswer == 'accepted'
+                && request.resource.data.fare == resource.data.counterOffer));
+
       // The accepting driver moves his own ride forward: "On the way", then "Completed".
       // After "On the way" the student can no longer cancel (his rule above only
       // covers requested and accepted rides).
       allow update: if isApprovedDriver()
         && isSelf(resource.data.driverId)
         && resource.data.status == 'accepted'
+        && (resource.data.counterOffer == null || resource.data.get('counterAnswer', null) != null)
         && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status', 'startedAt'])
         && request.resource.data.status == 'on_the_way'
         && request.resource.data.startedAt == request.time;

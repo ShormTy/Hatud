@@ -548,6 +548,60 @@ function isActiveRide(r) {
   return r.data.status === "accepted" || r.data.status === "on_the_way";
 }
 
+// ---------- Counter-offer from the student (one time only) ----------
+
+function isCounterPending(data) {
+  const sent = data.counterOffer !== null && data.counterOffer !== undefined;
+  return data.status === "accepted" && sent && !data.counterAnswer;
+}
+
+async function answerCounter(id, accept, offer) {
+  say("");
+  const question = accept
+    ? "Accept the student’s offer of ₱" + offer + "? The fare will change to ₱" + offer + "."
+    : "Keep your fare and say no to the offer?";
+  if (!window.confirm(question)) return;
+  const accepted = byId("counter-accept");
+  const kept = byId("counter-keep");
+  accepted.disabled = true;
+  kept.disabled = true;
+  try {
+    await updateDoc(doc(db, "rides", id),
+      accept ? { counterAnswer: "accepted", fare: offer } : { counterAnswer: "kept" });
+    // The live listener redraws the panel.
+  } catch (error) {
+    say(friendlyError(error));
+  } finally {
+    accepted.disabled = false;
+    kept.disabled = false;
+  }
+}
+
+function renderCounter(ride) {
+  const data = ride.data;
+  const sent = data.counterOffer !== null && data.counterOffer !== undefined;
+  const panel = byId("counter-panel");
+  panel.classList.toggle("hidden", !sent);
+  if (!sent) return;
+
+  const pending = isCounterPending(data);
+  byId("counter-accept").classList.toggle("hidden", !pending);
+  byId("counter-keep").classList.toggle("hidden", !pending);
+
+  if (pending) {
+    byId("counter-info").textContent = "The student offers ₱" + data.counterOffer + " instead of ₱" + data.fare + ". Answer once: accept it, or keep your fare.";
+    byId("counter-accept").textContent = "Accept ₱" + data.counterOffer;
+    byId("counter-accept").onclick = () => answerCounter(ride.id, true, data.counterOffer);
+    byId("counter-keep").onclick = () => answerCounter(ride.id, false, data.counterOffer);
+  } else if (data.counterAnswer === "accepted") {
+    byId("counter-info").textContent = "You accepted the student’s offer. The fare is now ₱" + data.fare + ".";
+  } else if (data.counterAnswer === "kept") {
+    byId("counter-info").textContent = "You kept your fare of ₱" + data.fare + " (the student offered ₱" + data.counterOffer + ").";
+  } else {
+    byId("counter-info").textContent = "The student offered ₱" + data.counterOffer + ".";
+  }
+}
+
 async function renderCurrent() {
   const active = myRides.find(isActiveRide);
 
@@ -584,6 +638,13 @@ async function renderCurrent() {
   byId("current-hint").textContent = underway
     ? ""
     : "Tap the button when you leave for the pickup.";
+
+  // The fare and a counter-offer can change while the ride is open, so they follow the ride every time.
+  byId("current-fare").textContent = "₱" + active.data.fare;
+  renderCounter(active);
+  const counterPending = isCounterPending(active.data);
+  byId("advance").disabled = counterPending;
+  if (counterPending) byId("current-hint").textContent = "First answer the student’s counter-offer above.";
 
   if (currentId === active.id) return; // the details below are already shown
   currentId = active.id;
