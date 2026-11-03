@@ -93,6 +93,49 @@ input {
   color: var(--error-text);
   font-size: 14px;
 }
-.hidden { display: none; }
+.hidden { display: none !important; }
 .signed-in p { margin: 0 0 6px; }
 .email { font-weight: 600; word-break: break-all; }
+
+/* Sign-up form additions */
+select {
+  width: 100%;
+  padding: 12px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: var(--bg);
+  color: var(--text);
+  font-size: 16px;
+}
+fieldset { margin: 12px 0 0; padding: 0; border: 0; }
+legend { padding: 0; margin-bottom: 4px; font-size: 14px; color: var(--muted); }
+.choice { display: flex; gap: 8px; }
+.choice label { flex: 1; margin: 0; }
+.choice input { position: absolute; opacity: 0; width: 0; height: 0; }
+.choice span {
+  display: block;
+  padding: 10px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  text-align: center;
+  color: var(--text);
+  cursor: pointer;
+}
+.choice input:checked + span {
+  background: var(--brand);
+  border-color: var(--brand);
+  color: var(--brand-text);
+  font-weight: 600;
+}
+.choice input:focus-visible + span { outline: 2px solid var(--brand); outline-offset: 2px; }
+.hint { margin: 6px 0 0; font-size: 13px; color: var(--muted); }
+.consent {
+  display: flex;
+  gap: 10px;
+  align-items: flex-start;
+  margin-top: 16px;
+  font-size: 13px;
+  color: var(--muted);
+}
+.consent input { width: auto; margin-top: 3px; }
+.status { margin: 10px 0 0; padding: 10px 12px; border-radius: 10px; background: var(--bg); font-size: 14px; }

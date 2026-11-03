@@ -2,8 +2,86 @@ rules_version = '2';
 
 service cloud.firestore {
   match /databases/{database}/documents {
-    match /{document=**} {
+
+    // ---- Small helper checks ----
+
+    function isSelf(uid) {
+      return request.auth != null && request.auth.uid == uid;
+    }
+
+    function isText(value, maxLength) {
+      return value is string && value.size() > 0 && value.size() <= maxLength;
+    }
+
+    function isPhone(value) {
+      return value is string && value.matches('^[0-9+() -]{7,20}$');
+    }
+
+    // The pilot invite code. Only these rules can read it.
+    function pilotCode() {
+      return get(/databases/$(database)/documents/settings/pilot).data.inviteCode;
+    }
+
+    // ---- settings: never readable or writable from the app ----
+    // The owner edits settings/pilot in the Firebase console.
+    match /settings/{document=**} {
       allow read, write: if false;
     }
+
+    // ---- users: one profile per person, readable only by that person ----
+    match /users/{uid} {
+      allow read: if isSelf(uid);
+      allow create: if isSelf(uid)
+        && (isNewStudent(request.resource.data) || isNewDriver(request.resource.data));
+      // No updates or deletes from the app for now.
+    }
+
+    function isNewStudent(d) {
+      return d.keys().hasOnly(['name', 'role', 'school', 'contactNumber', 'inviteCode', 'createdAt', 'consentAt', 'blocked'])
+        && d.keys().hasAll(['name', 'role', 'school', 'contactNumber', 'inviteCode', 'createdAt', 'consentAt', 'blocked'])
+        && d.role == 'student'
+        && isText(d.name, 60)
+        && isText(d.school, 80)
+        && isPhone(d.contactNumber)
+        && d.createdAt == request.time
+        && d.consentAt == request.time
+        && d.blocked == false
+        && d.inviteCode == pilotCode();
+    }
+
+    function isNewDriver(d) {
+      return d.keys().hasOnly(['name', 'role', 'contactNumber', 'createdAt', 'consentAt', 'blocked'])
+        && d.keys().hasAll(['name', 'role', 'contactNumber', 'createdAt', 'consentAt', 'blocked'])
+        && d.role == 'driver'
+        && isText(d.name, 60)
+        && isPhone(d.contactNumber)
+        && d.createdAt == request.time
+        && d.consentAt == request.time
+        && d.blocked == false;
+    }
+
+    // ---- drivers: vehicle details and approval status ----
+    // A driver can create only a "pending" record for himself, in the same
+    // batch as his users record. The owner switches approvalStatus to
+    // "approved" in the Firebase console (the console ignores these rules).
+    match /drivers/{uid} {
+      allow read: if isSelf(uid);
+      allow create: if isSelf(uid)
+        && isNewDriverRecord(request.resource.data)
+        && getAfter(/databases/$(database)/documents/users/$(uid)).data.role == 'driver';
+      // No updates or deletes from the app for now.
+    }
+
+    function isNewDriverRecord(d) {
+      return d.keys().hasOnly(['vehicleType', 'plateNumber', 'contactNumber', 'approvalStatus', 'available'])
+        && d.keys().hasAll(['vehicleType', 'plateNumber', 'contactNumber', 'approvalStatus', 'available'])
+        && d.vehicleType in ['tricycle', 'motorcycle', 'car', 'van']
+        && isText(d.plateNumber, 12)
+        && isPhone(d.contactNumber)
+        && d.approvalStatus == 'pending'
+        && d.available == false;
+    }
+
+    // Everything not listed above is denied.
   }
 }

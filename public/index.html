@@ -20,11 +20,60 @@
         </div>
 
         <form id="auth-form" novalidate>
+          <!-- Sign-up only: who you are -->
+          <div class="signup-only hidden">
+            <fieldset>
+              <legend>I am a</legend>
+              <div class="choice">
+                <label><input type="radio" name="role" value="student" checked><span>Student</span></label>
+                <label><input type="radio" name="role" value="driver"><span>Driver</span></label>
+              </div>
+            </fieldset>
+
+            <label for="full-name">Full name</label>
+            <input id="full-name" type="text" autocomplete="name" maxlength="60">
+
+            <div class="student-only">
+              <label for="school">School</label>
+              <input id="school" type="text" maxlength="80" placeholder="Tagbilaran City College">
+            </div>
+
+            <div class="driver-only hidden">
+              <label for="vehicle-type">Vehicle</label>
+              <select id="vehicle-type">
+                <option value="">Choose one</option>
+                <option value="tricycle">Tricycle</option>
+                <option value="motorcycle">Motorcycle</option>
+                <option value="car">Car</option>
+                <option value="van">Van</option>
+              </select>
+
+              <label for="plate">Plate number</label>
+              <input id="plate" type="text" autocapitalize="characters" maxlength="12">
+              <p class="hint">Drivers are approved in person by the owner before they can see ride requests.</p>
+            </div>
+
+            <label for="contact">Contact number</label>
+            <input id="contact" type="tel" autocomplete="tel" inputmode="tel" maxlength="20" placeholder="09xx xxx xxxx">
+
+            <div class="student-only">
+              <label for="invite">Pilot invite code</label>
+              <input id="invite" type="text" autocomplete="off" autocapitalize="off" maxlength="60">
+              <p class="hint">Ask the Hatud owner for the code.</p>
+            </div>
+          </div>
+
           <label for="email">Email</label>
           <input id="email" type="email" autocomplete="email" inputmode="email" required>
 
           <label for="password">Password</label>
           <input id="password" type="password" autocomplete="current-password" minlength="6" required>
+
+          <!-- Sign-up only: consent (draft wording, owner to review) -->
+          <label class="consent signup-only hidden">
+            <input id="consent" type="checkbox">
+            <span>I agree that Hatud keeps my name and contact number, plus my school (students) or vehicle details (drivers), to run this pilot. A driver’s contact number is shown to a student only after the driver accepts that student’s ride. I can ask the owner to delete my account and data.</span>
+          </label>
 
           <button class="primary" id="submit" type="submit">Log in</button>
         </form>
@@ -32,8 +81,9 @@
 
       <!-- Shown when somebody is signed in -->
       <section id="signed-in-view" class="signed-in hidden">
-        <p>You’re signed in as</p>
+        <p id="profile-title">Loading…</p>
         <p class="email" id="signed-in-email"></p>
+        <p class="status hidden" id="profile-status"></p>
         <button class="primary" id="signout" type="button">Sign out</button>
       </section>
 
