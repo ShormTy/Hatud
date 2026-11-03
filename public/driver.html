@@ -21,6 +21,21 @@
     <p class="hint hidden" id="note" role="alert"></p>
   </section>
 
+  <section class="panel hidden" id="vehicle-panel">
+    <button class="secondary" id="vehicle-edit" type="button">Change my vehicle or plate number</button>
+    <div id="vehicle-form" class="hidden">
+      <label for="vehicle-type">Vehicle type</label>
+      <input id="vehicle-type" type="text" autocapitalize="characters" maxlength="30" placeholder="TRICYCLE, HABAL-HABAL, CAR…">
+
+      <label for="plate">Plate number</label>
+      <input id="plate" type="text" autocapitalize="characters" maxlength="12">
+
+      <button class="primary" id="vehicle-save" type="button">Save</button>
+      <button class="secondary" id="vehicle-cancel" type="button">Cancel</button>
+      <p class="hint">Students see this vehicle and plate number after you accept their ride. If you change them, your account goes back to pending until the owner checks your vehicle again.</p>
+    </div>
+  </section>
+
   <section class="panel hidden" id="current">
     <p class="panel-title">Your current ride</p>
     <p class="status" id="current-status"></p>

@@ -139,3 +139,6 @@ legend { padding: 0; margin-bottom: 4px; font-size: 14px; color: var(--muted); }
 }
 .consent input { width: auto; margin-top: 3px; }
 .status { margin: 10px 0 0; padding: 10px 12px; border-radius: 10px; background: var(--bg); font-size: 14px; }
+
+/* Vehicle type and plate number are shown in capital letters */
+#vehicle-type, #plate { text-transform: uppercase; }

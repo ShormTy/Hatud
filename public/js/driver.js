@@ -2,6 +2,7 @@
 // accepts one by typing a fare, and then sees the student's details.
 import { requireRole, logOut } from "./session.js";
 import { db } from "./firebase.js";
+import { makeCaps } from "./caps.js";
 import {
   doc,
   getDoc,
@@ -189,14 +190,16 @@ async function accept(id, fareText) {
         taken.code = "taken";
         throw taken;
       }
+      const mineSnap = await transaction.get(doc(db, "drivers", me.user.uid));
+      const mine = mineSnap.data();
       transaction.update(ref, {
         status: "accepted",
         driverId: me.user.uid,
         fare,
         driverName: me.profile.name,
-        vehicleType: vehicle.vehicleType,
-        plateNumber: vehicle.plateNumber,
-        driverContact: vehicle.contactNumber,
+        vehicleType: mine.vehicleType,
+        plateNumber: mine.plateNumber,
+        driverContact: mine.contactNumber,
         acceptedAt: serverTimestamp()
       });
     });
@@ -790,6 +793,73 @@ function startListening() {
 
 // ---------- Start ----------
 
+// ---------- Changing the vehicle or plate number ----------
+// A driver can change these, but his account then goes back to pending (the owner checks
+// the vehicle again). A ride he already accepted keeps the vehicle
+// the student was shown, so changes wait until that ride is finished.
+
+function showVehicleLine() {
+  byId("vehicle").textContent = vehicle.vehicleType + " • " + vehicle.plateNumber;
+  byId("vehicle").classList.remove("hidden");
+}
+
+function openVehicleForm() {
+  say("");
+  if (currentId) {
+    say("Please finish your current ride before changing your vehicle.");
+    return;
+  }
+  byId("vehicle-type").value = vehicle.vehicleType;
+  byId("plate").value = vehicle.plateNumber;
+  byId("vehicle-form").classList.remove("hidden");
+  byId("vehicle-edit").classList.add("hidden");
+}
+
+function closeVehicleForm() {
+  byId("vehicle-form").classList.add("hidden");
+  byId("vehicle-edit").classList.remove("hidden");
+}
+
+async function saveVehicle() {
+  say("");
+  if (currentId) {
+    say("Please finish your current ride before changing your vehicle.");
+    return;
+  }
+  const vehicleType = byId("vehicle-type").value.trim().replace(/\s+/g, " ").toUpperCase();
+  const plateNumber = byId("plate").value.trim().replace(/\s+/g, " ").toUpperCase();
+  if (!vehicleType) {
+    say("Please type your vehicle type, for example TRICYCLE.");
+    return;
+  }
+  if (!plateNumber) {
+    say("Please type your plate number.");
+    return;
+  }
+  if (vehicleType === String(vehicle.vehicleType).toUpperCase()
+      && plateNumber === String(vehicle.plateNumber).toUpperCase()) {
+    say("Nothing changed.");
+    closeVehicleForm();
+    return;
+  }
+  // An approved driver goes back to "pending" when he changes these: the owner checks again.
+  if (vehicle.approvalStatus === "approved"
+      && !window.confirm("Are you sure? Changing your vehicle or plate number puts your account back to pending. You will not see or accept ride requests until the owner checks your vehicle again.")) {
+    return;
+  }
+  const button = byId("vehicle-save");
+  button.disabled = true;
+  try {
+    await updateDoc(doc(db, "drivers", me.user.uid), { vehicleType, plateNumber, approvalStatus: "pending" });
+    window.alert("Saved. Your account is now pending: the owner will check your vehicle again before you can accept rides.");
+    window.location.reload(); // the page starts again as a pending driver
+  } catch (error) {
+    say(friendlyError(error));
+  } finally {
+    button.disabled = false;
+  }
+}
+
 requireRole("driver")
   .then(async (session) => {
     me = session;
@@ -798,8 +868,13 @@ requireRole("driver")
     vehicle = snap.exists() ? snap.data() : null;
 
     if (vehicle) {
-      byId("vehicle").textContent = vehicle.vehicleType + " • " + vehicle.plateNumber;
-      byId("vehicle").classList.remove("hidden");
+      showVehicleLine();
+      byId("vehicle-panel").classList.remove("hidden");
+      byId("vehicle-edit").onclick = openVehicleForm;
+      byId("vehicle-cancel").onclick = closeVehicleForm;
+      byId("vehicle-save").onclick = saveVehicle;
+      makeCaps(byId("vehicle-type"));
+      makeCaps(byId("plate"));
     }
 
     if (vehicle && vehicle.approvalStatus === "approved" && session.profile.blocked !== true) {

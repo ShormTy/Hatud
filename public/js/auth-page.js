@@ -1,5 +1,6 @@
 // Log in / sign up page (index.html).
 import { auth, db } from "./firebase.js";
+import { makeCaps } from "./caps.js";
 import {
   onAuthStateChanged,
   createUserWithEmailAndPassword,
@@ -15,6 +16,9 @@ import {
 } from "https://www.gstatic.com/firebasejs/12.3.0/firebase-firestore.js";
 
 const byId = (id) => document.getElementById(id);
+
+makeCaps(byId("vehicle-type"));
+makeCaps(byId("plate"));
 
 const tabLogin = byId("tab-login");
 const tabSignup = byId("tab-signup");
@@ -111,9 +115,9 @@ function readSignupForm() {
     if (!data.school) return { error: "Please type your school." };
     if (!data.inviteCode) return { error: "Please type the pilot invite code." };
   } else {
-    data.vehicleType = byId("vehicle-type").value;
-    data.plateNumber = byId("plate").value.trim().toUpperCase();
-    if (!data.vehicleType) return { error: "Please choose your vehicle." };
+    data.vehicleType = byId("vehicle-type").value.trim().replace(/\s+/g, " ").toUpperCase();
+    data.plateNumber = byId("plate").value.trim().replace(/\s+/g, " ").toUpperCase();
+    if (!data.vehicleType) return { error: "Please type your vehicle type, for example TRICYCLE." };
     if (!data.plateNumber) return { error: "Please type your plate number." };
   }
 

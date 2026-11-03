@@ -69,13 +69,23 @@ service cloud.firestore {
       allow create: if isSelf(uid)
         && isNewDriverRecord(request.resource.data)
         && getAfter(/databases/$(database)/documents/users/$(uid)).data.role == 'driver';
-      // No updates or deletes from the app for now.
+      // A driver can change his own vehicle type and plate number, but a change
+      // always puts his account back to "pending" in the same write, so the owner
+      // checks the vehicle again before he can accept rides. He can never set
+      // "approved" himself (only the owner can, in the console).
+      allow update: if isSelf(uid)
+        && resource.data.approvalStatus in ['approved', 'pending']
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['vehicleType', 'plateNumber', 'approvalStatus'])
+        && request.resource.data.approvalStatus == 'pending'
+        && isText(request.resource.data.vehicleType, 30)
+        && isText(request.resource.data.plateNumber, 12);
+      // No deletes from the app.
     }
 
     function isNewDriverRecord(d) {
       return d.keys().hasOnly(['vehicleType', 'plateNumber', 'contactNumber', 'approvalStatus', 'available'])
         && d.keys().hasAll(['vehicleType', 'plateNumber', 'contactNumber', 'approvalStatus', 'available'])
-        && d.vehicleType in ['tricycle', 'motorcycle', 'car', 'van']
+        && isText(d.vehicleType, 30)
         && isText(d.plateNumber, 12)
         && isPhone(d.contactNumber)
         && d.approvalStatus == 'pending'
