@@ -25,6 +25,7 @@ const REASONS = {
 let users = new Map();
 let drivers = new Map();
 let reports = [];
+let admins = new Set();
 let tab = "drivers";
 
 // Everything people typed is shown with textContent, never as HTML.
@@ -117,7 +118,7 @@ function driverCard(uid, d) {
   return card;
 }
 
-function personCard(uid, u) {
+function personCard(uid, u, canBlock) {
   const card = el("div", null, "history-item");
   card.append(el("p", u.name, "panel-title"));
   card.append(line("Role:", u.role + (u.blocked ? " (BLOCKED)" : "")));
@@ -125,7 +126,7 @@ function personCard(uid, u) {
   card.append(line("Contact:", u.contactNumber));
   card.append(line("Signed up:", when(u.createdAt)));
   card.append(line("ID:", uid));
-  card.append(blockButton(uid));
+  if (canBlock) card.append(blockButton(uid));
   return card;
 }
 
@@ -147,9 +148,11 @@ function reportCard(r) {
 function render() {
   const pending = [...drivers.values()].filter((d) => d.approvalStatus !== "approved").length;
   const fresh = reports.filter((r) => r.status === "new").length;
+  const students = [...users].filter(([uid, u]) => u.role === "student" && !admins.has(uid));
   const names = {
-    drivers: "Drivers (" + pending + " pending)",
-    people: "People (" + users.size + ")",
+    drivers: "Drivers" + (pending ? " (" + pending + " waiting)" : ""),
+    students: "Students (" + students.length + ")",
+    admins: "Admins (" + admins.size + ")",
     reports: "Reports (" + fresh + " new)"
   };
   const tabs = byId("tabs");
@@ -159,18 +162,27 @@ function render() {
     b.setAttribute("aria-selected", String(tab === key));
     tabs.append(b);
   }
-  byId("search").classList.toggle("hidden", tab !== "people");
+  byId("search").classList.toggle("hidden", tab !== "drivers" && tab !== "students");
 
+  const q = byId("search").value.trim().toLowerCase();
+  const match = (text) => !q || text.toLowerCase().includes(q);
+  const byName = ([, a], [, b]) => (a.name || "").localeCompare(b.name || "");
   const cards = [];
   if (tab === "drivers") {
     // Waiting drivers first.
-    [...drivers].sort(([, a], [, b]) => (a.approvalStatus === "approved") - (b.approvalStatus === "approved"))
+    [...drivers]
+      .filter(([uid, d]) => match(((users.get(uid) || {}).name || "") + " " + d.contactNumber + " " + d.plateNumber + " " + uid))
+      .sort(([, a], [, b]) => (a.approvalStatus === "approved") - (b.approvalStatus === "approved"))
       .forEach(([uid, d]) => cards.push(driverCard(uid, d)));
-  } else if (tab === "people") {
-    const q = byId("search").value.trim().toLowerCase();
-    [...users].filter(([uid, u]) => !q || (u.name + " " + u.contactNumber + " " + uid).toLowerCase().includes(q))
-      .sort(([, a], [, b]) => (a.name || "").localeCompare(b.name || ""))
-      .forEach(([uid, u]) => cards.push(personCard(uid, u)));
+  } else if (tab === "students") {
+    students.filter(([uid, u]) => match(u.name + " " + u.contactNumber + " " + uid))
+      .sort(byName)
+      .forEach(([uid, u]) => cards.push(personCard(uid, u, true)));
+  } else if (tab === "admins") {
+    // Admins are made and removed by hand in the Firebase console, so there are no buttons here.
+    [...admins].map((uid) => [uid, users.get(uid) || { name: uid, role: "no profile" }])
+      .sort(byName)
+      .forEach(([uid, u]) => cards.push(personCard(uid, u, false)));
   } else {
     // New reports first, then the newest.
     [...reports].sort((a, b) => (b.status === "new") - (a.status === "new")
@@ -184,10 +196,11 @@ function render() {
 async function load() {
   say("Loading…");
   try {
-    const [u, d, r] = await Promise.all(["users", "drivers", "reports"].map((name) => getDocs(collection(db, name))));
+    const [u, d, r, a] = await Promise.all(["users", "drivers", "reports", "admins"].map((name) => getDocs(collection(db, name))));
     users = new Map(u.docs.map((x) => [x.id, x.data()]));
     drivers = new Map(d.docs.map((x) => [x.id, x.data()]));
     reports = r.docs.map((x) => ({ id: x.id, ...x.data() }));
+    admins = new Set(a.docs.map((x) => x.id));
     say("");
   } catch (error) {
     say("Could not load (" + (error.code || "error") + "). Check your internet and press Refresh.");

@@ -32,7 +32,7 @@ service cloud.firestore {
     // The owner makes the document admins/{uid} by hand in the Firebase console
     // (the console ignores these rules). The app can never create or change it.
     match /admins/{uid} {
-      allow read: if isSelf(uid);
+      allow read: if isSelf(uid) || isAdmin();
     }
 
     function isAdmin() {
