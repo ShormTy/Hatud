@@ -129,13 +129,30 @@ service cloud.firestore {
         && request.resource.data.plateNumber == get(/databases/$(database)/documents/drivers/$(request.auth.uid)).data.plateNumber
         && request.resource.data.driverContact == get(/databases/$(database)/documents/drivers/$(request.auth.uid)).data.contactNumber;
 
+      // The accepting driver moves his own ride forward: "On the way", then "Completed".
+      // After "On the way" the student can no longer cancel (his rule above only
+      // covers requested and accepted rides).
+      allow update: if isApprovedDriver()
+        && isSelf(resource.data.driverId)
+        && resource.data.status == 'accepted'
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status', 'startedAt'])
+        && request.resource.data.status == 'on_the_way'
+        && request.resource.data.startedAt == request.time;
+
+      allow update: if isApprovedDriver()
+        && isSelf(resource.data.driverId)
+        && resource.data.status == 'on_the_way'
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status', 'completedAt'])
+        && request.resource.data.status == 'completed'
+        && request.resource.data.completedAt == request.time;
+
       // The student's name and contact number live in a small private record next
       // to the ride, so drivers cannot see them before accepting.
       match /private/{docId} {
         allow read: if docId == 'student'
           && (isSelf(get(/databases/$(database)/documents/rides/$(rideId)).data.studentId)
               || (get(/databases/$(database)/documents/rides/$(rideId)).data.driverId == request.auth.uid
-                  && get(/databases/$(database)/documents/rides/$(rideId)).data.status == 'accepted'));
+                  && get(/databases/$(database)/documents/rides/$(rideId)).data.status in ['accepted', 'on_the_way']));
         allow create: if docId == 'student'
           && isSelf(getAfter(/databases/$(database)/documents/rides/$(rideId)).data.studentId)
           && !exists(/databases/$(database)/documents/rides/$(rideId))
@@ -157,10 +174,16 @@ service cloud.firestore {
         && request.resource.data.rideId is string
         && !exists(/databases/$(database)/documents/rides/$(request.resource.data.rideId))
         && getAfter(/databases/$(database)/documents/rides/$(request.resource.data.rideId)).data.studentId == uid;
-      // The lock can go only in the same batch that cancels or expires the ride.
+      // The lock can go in three cases: in the same batch that cancels or expires
+      // the ride; after the ride is completed; or, as a safety valve, when a ride has
+      // been "on the way" for more than 6 hours (for example if the driver never
+      // tapped Completed), so a student is never stuck.
       allow delete: if isSelf(uid)
-        && get(/databases/$(database)/documents/rides/$(resource.data.rideId)).data.status in ['requested', 'accepted']
-        && getAfter(/databases/$(database)/documents/rides/$(resource.data.rideId)).data.status in ['cancelled', 'expired'];
+        && ((get(/databases/$(database)/documents/rides/$(resource.data.rideId)).data.status in ['requested', 'accepted']
+             && getAfter(/databases/$(database)/documents/rides/$(resource.data.rideId)).data.status in ['cancelled', 'expired'])
+            || get(/databases/$(database)/documents/rides/$(resource.data.rideId)).data.status == 'completed'
+            || (get(/databases/$(database)/documents/rides/$(resource.data.rideId)).data.status == 'on_the_way'
+                && get(/databases/$(database)/documents/rides/$(resource.data.rideId)).data.startedAt <= request.time - duration.value(6, 'h')));
     }
 
     // A signed-in driver who is not blocked and whom the owner has approved.

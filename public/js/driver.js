@@ -10,6 +10,7 @@ import {
   where,
   onSnapshot,
   runTransaction,
+  updateDoc,
   serverTimestamp
 } from "https://www.gstatic.com/firebasejs/12.3.0/firebase-firestore.js";
 
@@ -222,13 +223,41 @@ function renderList() {
 
 // ---------- Current ride ----------
 
-async function renderCurrent() {
-  const active = myRides.find((r) => r.data.status === "accepted");
+// Moves the current ride forward: accepted -> on the way -> completed.
+async function advance(id, status) {
+  say("");
+  const button = byId("advance");
+  if (status === "on_the_way") {
+    if (!window.confirm("Tap OK when you are leaving for the pickup. The student can no longer cancel after this.")) return;
+  } else if (!window.confirm("Mark this ride as completed?")) {
+    return;
+  }
+  button.disabled = true;
+  try {
+    await updateDoc(doc(db, "rides", id),
+      status === "on_the_way"
+        ? { status: "on_the_way", startedAt: serverTimestamp() }
+        : { status: "completed", completedAt: serverTimestamp() });
+    // The live listener redraws the panel.
+  } catch (error) {
+    say(friendlyError(error));
+  } finally {
+    button.disabled = false;
+  }
+}
 
-  // A ride this driver was on has been cancelled by the student.
+function isActiveRide(r) {
+  return r.data.status === "accepted" || r.data.status === "on_the_way";
+}
+
+async function renderCurrent() {
+  const active = myRides.find(isActiveRide);
+
+  // A ride this driver was on has ended.
   if (!active && currentId) {
     const gone = myRides.find((r) => r.id === currentId);
     if (gone && gone.data.status === "cancelled") say("The student cancelled the ride.");
+    if (gone && gone.data.status === "completed") say("Ride completed. Thank you!");
   }
 
   byId("current").classList.toggle("hidden", !active);
@@ -238,7 +267,18 @@ async function renderCurrent() {
     currentId = null;
     return;
   }
-  if (currentId === active.id) return; // already shown
+  // The status line and the button follow the ride's status every time.
+  const underway = active.data.status === "on_the_way";
+  byId("current-status").textContent = underway
+    ? "You are on the way. Tap Completed when the ride is done."
+    : "Accepted. The student can still cancel until you tap I’m on the way.";
+  byId("advance").textContent = underway ? "Completed" : "I’m on the way";
+  byId("advance").onclick = () => advance(active.id, underway ? "completed" : "on_the_way");
+  byId("current-hint").textContent = underway
+    ? ""
+    : "Tap the button when you leave for the pickup.";
+
+  if (currentId === active.id) return; // the details below are already shown
   currentId = active.id;
 
   const data = active.data;

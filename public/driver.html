@@ -23,12 +23,14 @@
 
   <section class="panel hidden" id="current">
     <p class="panel-title">Your current ride</p>
+    <p class="status" id="current-status"></p>
     <p class="ride-line"><strong>Fare:</strong> <span id="current-fare"></span> (cash)</p>
     <p class="ride-line"><strong>Student:</strong> <span id="current-student"></span></p>
     <p class="ride-line"><strong>Contact:</strong> <a id="current-contact" href="#"></a></p>
     <p class="ride-line"><strong>From (A):</strong> <span id="current-from"></span></p>
     <p class="ride-line"><strong>To (B):</strong> <span id="current-to"></span></p>
-    <p class="hint">The “On the way” and “Completed” buttons come in the next step. The student can still cancel for now.</p>
+    <button class="primary" id="advance" type="button"></button>
+    <p class="hint" id="current-hint"></p>
   </section>
 
   <!-- Shown only to approved drivers -->

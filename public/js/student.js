@@ -6,6 +6,7 @@ import {
   doc,
   collection,
   getDoc,
+  deleteDoc,
   onSnapshot,
   writeBatch,
   serverTimestamp,
@@ -279,13 +280,18 @@ function showActive(rideId, ride) {
   map.fitBounds(L.latLngBounds([from, to]), { padding: [40, 40], maxZoom: 17 });
 
   const accepted = ride.status === "accepted";
+  const underway = ride.status === "on_the_way";
+  const hasDriver = accepted || underway;
   byId("active-status").textContent = ride.status === "requested"
     ? "Waiting for a driver to accept."
     : accepted
       ? "A driver accepted your request. If the fare is not OK for you, you can cancel."
-      : "Status: " + ride.status;
-  byId("driver-box").classList.toggle("hidden", !accepted);
-  if (accepted) {
+      : underway
+        ? "Your driver is on the way. You can’t cancel here anymore; please call or text the driver if something changed."
+        : "Status: " + ride.status;
+  byId("driver-box").classList.toggle("hidden", !hasDriver);
+  byId("cancel").classList.toggle("hidden", underway);
+  if (hasDriver) {
     byId("driver-fare").textContent = "₱" + ride.fare;
     byId("driver-name").textContent = ride.driverName;
     byId("driver-vehicle").textContent = ride.vehicleType + " • " + ride.plateNumber;
@@ -326,6 +332,18 @@ async function cancelRide(rideId) {
   }
 }
 
+// The driver tapped Completed: release the student's lock and go back to the planner.
+async function finishCompleted() {
+  try {
+    await deleteDoc(doc(db, "locks", me.user.uid));
+  } catch (error) {
+    say(friendlyError(error));
+    return;
+  }
+  showPlanner();
+  say("Your ride is completed. Thank you for using Hatud!");
+}
+
 // Looks for an open request and shows the right panel.
 async function showCurrentState() {
   const lockSnap = await getDoc(doc(db, "locks", me.user.uid));
@@ -342,6 +360,24 @@ async function showCurrentState() {
   } catch (error) {
     say("We couldn’t load your open request. Please refresh, or tell the Hatud owner if this keeps happening.");
     return;
+  }
+
+  // A finished ride frees the student to make a new request.
+  if (ride.status === "completed") {
+    await finishCompleted();
+    return;
+  }
+  // Safety valve: a ride that has been "on the way" for over 6 hours is let go.
+  if (ride.status === "on_the_way" && ride.startedAt
+      && ride.startedAt.toDate().getTime() < Date.now() - 6 * 60 * 60 * 1000) {
+    try {
+      await deleteDoc(doc(db, "locks", me.user.uid));
+      showPlanner();
+      say("Your last ride was never marked as completed, so it was closed. You can make a new request.");
+      return;
+    } catch (error) {
+      // Not allowed yet by the server clock; show it as it is.
+    }
   }
 
   // A request that ran out of time is closed automatically.
@@ -364,8 +400,11 @@ async function showCurrentState() {
     (snap) => {
       const latest = snap.data();
       if (!latest) return;
-      if (latest.status === "requested" || latest.status === "accepted") {
+      if (latest.status === "requested" || latest.status === "accepted" || latest.status === "on_the_way") {
         showActive(rideId, latest);
+      } else if (latest.status === "completed") {
+        if (stopWatching) { stopWatching(); stopWatching = null; }
+        finishCompleted();
       } else {
         if (stopWatching) { stopWatching(); stopWatching = null; }
         showCurrentState();
