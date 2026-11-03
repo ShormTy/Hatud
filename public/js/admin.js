@@ -150,7 +150,7 @@ function render() {
   const fresh = reports.filter((r) => r.status === "new").length;
   const students = [...users].filter(([uid, u]) => u.role === "student" && !admins.has(uid));
   const names = {
-    drivers: "Drivers" + (pending ? " (" + pending + " waiting)" : ""),
+    drivers: "Drivers (" + drivers.size + (pending ? ", " + pending + " waiting" : "") + ")",
     students: "Students (" + students.length + ")",
     admins: "Admins (" + admins.size + ")",
     reports: "Reports (" + fresh + " new)"
