@@ -82,6 +82,82 @@ service cloud.firestore {
         && d.available == false;
     }
 
+    // ---- rides: a student's ride requests ----
+    // A request is created together with a small "lock" record (below). The
+    // lock can only exist once per student, so a student can have only one open
+    // request at a time. Drivers will be able to read open requests in the
+    // next stage.
+    match /rides/{rideId} {
+      allow read: if isSelf(resource.data.studentId);
+      allow create: if isActiveStudent()
+        && isNewRide(request.resource.data)
+        && existsAfter(/databases/$(database)/documents/locks/$(request.auth.uid))
+        && getAfter(/databases/$(database)/documents/locks/$(request.auth.uid)).data.rideId == rideId;
+      // The student can only cancel his own open request, or close it once it
+      // has really run out of time. Nothing else may change from the student's side.
+      allow update: if isSelf(resource.data.studentId)
+        && resource.data.status == 'requested'
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status'])
+        && (request.resource.data.status == 'cancelled'
+            || (request.resource.data.status == 'expired' && resource.data.expiresAt <= request.time));
+    }
+
+    // ---- locks: one per student while a request is open ----
+    match /locks/{uid} {
+      allow read: if isSelf(uid);
+      // Only a create is allowed (no updates), so a second lock cannot be made.
+      allow create: if isSelf(uid)
+        && request.resource.data.keys().hasOnly(['rideId', 'studentId'])
+        && request.resource.data.keys().hasAll(['rideId', 'studentId'])
+        && request.resource.data.studentId == uid
+        && request.resource.data.rideId is string
+        && !exists(/databases/$(database)/documents/rides/$(request.resource.data.rideId))
+        && getAfter(/databases/$(database)/documents/rides/$(request.resource.data.rideId)).data.studentId == uid;
+      // The lock can go only in the same batch that cancels or expires the ride.
+      allow delete: if isSelf(uid)
+        && get(/databases/$(database)/documents/rides/$(resource.data.rideId)).data.status == 'requested'
+        && getAfter(/databases/$(database)/documents/rides/$(resource.data.rideId)).data.status in ['cancelled', 'expired'];
+    }
+
+    function isActiveStudent() {
+      let account = get(/databases/$(database)/documents/users/$(request.auth.uid)).data;
+      return account.role == 'student' && account.blocked == false;
+    }
+
+    // A pickup or drop-off point: latitude, longitude (inside Bohol) and a short label.
+    function isPoint(p) {
+      return p is map
+        && p.keys().hasOnly(['lat', 'lng', 'label'])
+        && p.keys().hasAll(['lat', 'lng', 'label'])
+        && p.lat is number && p.lng is number
+        && p.lat >= 9.3 && p.lat <= 10.3
+        && p.lng >= 123.6 && p.lng <= 124.8
+        && p.label is string && p.label.size() <= 60;
+    }
+
+    function isNewRide(d) {
+      return d.keys().hasOnly(['studentId', 'driverId', 'pickup', 'dropoff', 'fare', 'counterOffer', 'status', 'neededBy', 'expiresAt', 'createdAt', 'deleteAfter'])
+        && d.keys().hasAll(['studentId', 'driverId', 'pickup', 'dropoff', 'fare', 'counterOffer', 'status', 'neededBy', 'expiresAt', 'createdAt', 'deleteAfter'])
+        && d.studentId == request.auth.uid
+        && d.driverId == null
+        && d.fare == null
+        && d.counterOffer == null
+        && d.status == 'requested'
+        && isPoint(d.pickup)
+        && isPoint(d.dropoff)
+        && d.createdAt == request.time
+        // Open for at least a moment and at most 24 hours (plus 15 minutes of slack for phone clocks).
+        && d.expiresAt is timestamp
+        && d.expiresAt > request.time
+        && d.expiresAt <= request.time + duration.value(1455, 'm')
+        // "Needed by" is optional, and must fall inside the open time.
+        && (d.neededBy == null || (d.neededBy is timestamp && d.neededBy <= d.expiresAt))
+        // The record is kept for about 30 days (the tidy-up step comes later).
+        && d.deleteAfter is timestamp
+        && d.deleteAfter > request.time + duration.value(29, 'd')
+        && d.deleteAfter <= request.time + duration.value(31, 'd');
+    }
+
     // Everything not listed above is denied.
   }
 }

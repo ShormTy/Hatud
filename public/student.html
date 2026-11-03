@@ -18,6 +18,11 @@
   <div id="map" role="application" aria-label="Map of Tagbilaran City"></div>
 
   <section class="panel">
+    <p class="hint hidden" id="note" role="alert"></p>
+  </section>
+
+  <!-- Shown when the student has no open request -->
+  <section class="panel" id="planner">
     <fieldset>
       <legend>Tap the map to set</legend>
       <div class="choice">
@@ -28,10 +33,32 @@
 
     <button class="secondary" id="locate" type="button">Use my location as pickup</button>
     <p class="status" id="summary"></p>
-    <p class="hint hidden" id="note" role="alert"></p>
 
-    <button class="primary" type="button" disabled>Request ride (next step)</button>
+    <label for="pickup-label">Pickup landmark (optional)</label>
+    <input id="pickup-label" type="text" maxlength="60" placeholder="Main gate, Tagbilaran City College">
+
+    <label for="dropoff-label">Drop-off landmark (optional)</label>
+    <input id="dropoff-label" type="text" maxlength="60" placeholder="Dauis Church">
+
+    <label for="expiry">Keep my request open for <strong id="expiry-text">1 hour</strong></label>
+    <input id="expiry" type="range" min="30" max="1440" step="30" value="60">
+
+    <label for="needed-by">Needed by (optional)</label>
+    <input id="needed-by" type="datetime-local">
+
+    <button class="primary" id="request" type="button">Request ride</button>
     <button class="secondary" id="clear" type="button">Clear pins</button>
+  </section>
+
+  <!-- Shown when the student already has an open request -->
+  <section class="panel hidden" id="active">
+    <p class="panel-title">Your ride request</p>
+    <p class="status" id="active-status"></p>
+    <p class="ride-line"><strong>From (A):</strong> <span id="active-from"></span></p>
+    <p class="ride-line"><strong>To (B):</strong> <span id="active-to"></span></p>
+    <p class="ride-line"><strong>Open until:</strong> <span id="active-until"></span></p>
+    <p class="ride-line hidden" id="active-needed-line"><strong>Needed by:</strong> <span id="active-needed"></span></p>
+    <button class="secondary" id="cancel" type="button">Cancel request</button>
   </section>
 
   <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>

@@ -54,3 +54,15 @@ body.app-page { display: block; padding: 0; min-height: 100vh; }
 }
 .pin-pickup span { background: #0f766e; }
 .pin-dropoff span { background: #c2410c; }
+
+/* Request form additions */
+input[type="range"] {
+  padding: 0;
+  border: 0;
+  background: transparent;
+  accent-color: var(--brand);
+}
+input[type="datetime-local"] { min-height: 46px; }
+.panel-title { margin: 0 0 8px; font-size: 18px; font-weight: 600; }
+.ride-line { margin: 6px 0; font-size: 15px; }
+.ride-line strong { color: var(--muted); font-weight: 600; }
