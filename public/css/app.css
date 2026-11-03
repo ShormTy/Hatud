@@ -142,3 +142,27 @@ legend { padding: 0; margin-bottom: 4px; font-size: 14px; color: var(--muted); }
 
 /* Vehicle type and plate number are shown in capital letters */
 #vehicle-type, #plate { text-transform: uppercase; }
+
+/* Animated logo on the login page (stage 7b) */
+.logo-anim { display: block; width: 120px; height: auto; margin: 0 auto 4px; color: var(--brand); overflow: visible; }
+.logo-anim .logo-h { animation: logo-drive 0.9s cubic-bezier(0.2, 0.8, 0.2, 1) both; }
+.logo-anim .streak { transform-box: fill-box; transform-origin: right center; }
+.logo-anim .s1 { animation: logo-streak 0.6s ease-out 0.35s both, logo-pulse 2.6s ease-in-out 1.5s infinite; }
+.logo-anim .s2 { animation: logo-streak 0.6s ease-out 0.25s both, logo-pulse 2.6s ease-in-out 1.8s infinite; }
+.logo-anim .s3 { animation: logo-streak 0.6s ease-out 0.45s both, logo-pulse 2.6s ease-in-out 2.1s infinite; }
+@keyframes logo-drive {
+  0% { transform: translateX(-90px); opacity: 0; }
+  60% { transform: translateX(10px); opacity: 1; }
+  100% { transform: translateX(0); opacity: 1; }
+}
+@keyframes logo-streak {
+  from { transform: scaleX(0); opacity: 0; }
+  to { transform: scaleX(1); opacity: 1; }
+}
+@keyframes logo-pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.4; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .logo-anim .logo-h, .logo-anim .streak { animation: none; }
+}
