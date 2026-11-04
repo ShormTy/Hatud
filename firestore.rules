@@ -66,11 +66,25 @@ service cloud.firestore {
         && exists(/databases/$(database)/documents/reportTally/$(uid))
         && get(/databases/$(database)/documents/reportTally/$(uid)).data.reporters.size() >= 3
         && request.auth.uid in get(/databases/$(database)/documents/reportTally/$(uid)).data.reporters;
+      // A person can start or undo the 24-hour countdown of "Delete my account" (W10c): the only
+      // thing he can change is deleteRequestedAt, set to the server time (start, only when it is
+      // empty) or removed again (undo). A blocked person cannot.
+      allow update: if isSelf(uid)
+        && resource.data.blocked == false
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['deleteRequestedAt'])
+        && ((resource.data.get('deleteRequestedAt', null) == null
+             && request.resource.data.get('deleteRequestedAt', null) == request.time)
+            || (resource.data.get('deleteRequestedAt', null) != null
+                && request.resource.data.get('deleteRequestedAt', null) == null));
       // An admin can remove a profile (the login in Authentication stays). A person can delete
-      // his own profile (W10b, Delete my account), unless he is blocked (so a blocked person
-      // cannot wipe his account and sign up again) or has an open request (his lock).
+      // his own profile (W10b, Delete my account) only when 24 hours have passed since he asked
+      // (W10c), he is not blocked (so a blocked person cannot wipe his account and sign up again,
+      // and a block that arrives during the 24 hours stops the deletion), and he has no open
+      // request (his lock).
       allow delete: if isAdmin()
         || (isSelf(uid) && resource.data.blocked == false
+            && resource.data.get('deleteRequestedAt', null) != null
+            && resource.data.deleteRequestedAt <= request.time - duration.value(24, 'h')
             && !exists(/databases/$(database)/documents/locks/$(uid)));
     }
 
