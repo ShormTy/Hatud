@@ -282,3 +282,71 @@ legend { padding: 0; margin-bottom: 4px; font-size: 14px; color: var(--muted); }
   .primary, .secondary { transition: none; }
   .primary:active:not(:disabled), .secondary:active:not(:disabled) { transform: none; }
 }
+
+/* W17c: more life on the public pages (home, log in, privacy, 404).
+   Everything here is scoped to pages without the app-page class, except the focus ring. */
+
+/* A soft teal glow at the top of the page */
+body:not(.app-page) {
+  background:
+    radial-gradient(130% 55% at 50% -5%, rgba(13, 148, 136, 0.16), rgba(13, 148, 136, 0) 70%) no-repeat,
+    var(--bg);
+}
+
+/* Warm tagline under the name */
+.tagline { color: var(--accent-text); font-weight: 600; }
+
+/* Buttons get a soft teal shadow */
+body:not(.app-page) .primary { box-shadow: 0 6px 16px rgba(13, 148, 136, 0.28); }
+body:not(.app-page) .primary.ghost { box-shadow: none; }
+
+/* Log in / Sign up as one segmented switch */
+body:not(.app-page) .tabs {
+  gap: 4px;
+  padding: 4px;
+  background: var(--bg);
+  border: 1px solid var(--line);
+  border-radius: 14px;
+}
+body:not(.app-page) .tabs button { border-color: transparent; }
+body:not(.app-page) .tabs button[aria-selected="true"] { box-shadow: 0 1px 4px rgba(0, 0, 0, 0.2); }
+
+/* Warm bullet points in the safety list on the home page */
+.safe li::marker { color: var(--accent); }
+
+/* Small icons in the home page card headings (drawn by CSS, they follow the theme color) */
+main > .card.section:nth-of-type(2) h2::before,
+main > .card.section:nth-of-type(3) h2::before,
+main > .card.section:nth-of-type(4) h2::before {
+  content: "";
+  display: inline-block;
+  width: 20px;
+  height: 20px;
+  margin-right: 8px;
+  vertical-align: -3px;
+  background: var(--brand);
+  -webkit-mask-repeat: no-repeat;
+  mask-repeat: no-repeat;
+  -webkit-mask-position: center;
+  mask-position: center;
+  -webkit-mask-size: contain;
+  mask-size: contain;
+}
+main > .card.section:nth-of-type(2) h2::before {
+  -webkit-mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Ccircle cx='6' cy='19' r='2.5'/%3E%3Ccircle cx='18' cy='5' r='2.5'/%3E%3Cpath d='M8.5 19H15a3.5 3.5 0 0 0 0-7H9a3.5 3.5 0 0 1 0-7h6.5'/%3E%3C/svg%3E");
+  mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Ccircle cx='6' cy='19' r='2.5'/%3E%3Ccircle cx='18' cy='5' r='2.5'/%3E%3Cpath d='M8.5 19H15a3.5 3.5 0 0 0 0-7H9a3.5 3.5 0 0 1 0-7h6.5'/%3E%3C/svg%3E");
+}
+main > .card.section:nth-of-type(3) h2::before {
+  -webkit-mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M12 3l8 3v6c0 4.5-3.2 8-8 9-4.8-1-8-4.5-8-9V6l8-3z'/%3E%3Cpath d='M8.5 12l2.5 2.5 4.5-5'/%3E%3C/svg%3E");
+  mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M12 3l8 3v6c0 4.5-3.2 8-8 9-4.8-1-8-4.5-8-9V6l8-3z'/%3E%3Cpath d='M8.5 12l2.5 2.5 4.5-5'/%3E%3C/svg%3E");
+}
+main > .card.section:nth-of-type(4) h2::before {
+  -webkit-mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M5 21V4'/%3E%3Cpath d='M5 4h11l-2 4 2 4H5'/%3E%3C/svg%3E");
+  mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M5 21V4'/%3E%3Cpath d='M5 4h11l-2 4 2 4H5'/%3E%3C/svg%3E");
+}
+
+/* A clear focus ring on form fields, for keyboard and screen users */
+input:focus-visible, select:focus-visible, textarea:focus-visible {
+  outline: 2px solid var(--brand);
+  outline-offset: 1px;
+}
