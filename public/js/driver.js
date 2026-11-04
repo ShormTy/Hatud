@@ -3,7 +3,8 @@
 import { requireRole, logOut } from "./session.js";
 import { db } from "./firebase.js";
 import { makeCaps } from "./caps.js";
-import { addReportControls, loadReported } from "./report.js";
+import { addReportControls, loadReported, disableReporting } from "./report.js";
+import { showAppeal } from "./appeal.js";
 import { confirmBox } from "./dialog.js";
 import { SUPPORT_EMAIL } from "./support.js";
 import { keepScreenOn } from "./wakelock.js";
@@ -771,6 +772,8 @@ async function renderCurrent() {
 
   byId("current").classList.toggle("hidden", !active);
   byId("open-area-list").classList.toggle("hidden", !!active);
+  // A blocked driver gets no new requests, only the ride he already has (W22).
+  if (me.profile.blocked === true) byId("open-area-list").classList.add("hidden");
 
   if (!active) {
     const hadRide = currentId !== null;
@@ -870,21 +873,24 @@ function startPositionForList() {
   );
 }
 
-function startListening() {
+function startListening(blocked) {
   startPositionForList();
   const fail = () => {
     status.textContent = "Couldn’t load the requests. Please check your internet and refresh.";
     status.classList.remove("hidden");
   };
 
-  onSnapshot(
-    query(collection(db, "rides"), where("status", "==", "requested")),
-    (snapshot) => {
-      rides = snapshot.docs.map((d) => ({ id: d.id, data: d.data() }));
-      renderList();
-    },
-    fail
-  );
+  // A blocked driver does not read the open requests (the rules refuse it); he only follows his own rides.
+  if (!blocked) {
+    onSnapshot(
+      query(collection(db, "rides"), where("status", "==", "requested")),
+      (snapshot) => {
+        rides = snapshot.docs.map((d) => ({ id: d.id, data: d.data() }));
+        renderList();
+      },
+      fail
+    );
+  }
 
   onSnapshot(
     query(collection(db, "rides"), where("driverId", "==", me.user.uid)),
@@ -995,14 +1001,26 @@ requireRole("driver")
       makeCaps(byId("plate"));
     }
 
-    if (vehicle && vehicle.approvalStatus === "approved" && session.profile.blocked !== true) {
-      status.textContent = "";
-      status.classList.add("hidden");
+    const blocked = session.profile.blocked === true;
+    if (blocked) {
+      disableReporting(); // a blocked person cannot send reports (W22)
+      showAppeal({ uid: session.user.uid, profile: session.profile, before: byId("history") });
+    }
+
+    if (vehicle && vehicle.approvalStatus === "approved") {
+      if (blocked) {
+        // He can still finish a ride he already has, but he gets no new requests.
+        status.textContent = "Your account is blocked, so you can’t accept new rides. You can still finish a ride you already have. Contact the owner at " + SUPPORT_EMAIL + " or send an appeal below.";
+        status.classList.remove("hidden");
+      } else {
+        status.textContent = "";
+        status.classList.add("hidden");
+        await loadReported(session.user.uid);
+      }
       byId("open-area").classList.remove("hidden");
-      await loadReported(session.user.uid);
       startMap();
-      startListening();
-    } else if (session.profile.blocked === true) {
+      startListening(blocked);
+    } else if (blocked) {
       status.textContent = "Your account is blocked. Please contact the owner at " + SUPPORT_EMAIL + ".";
     } else {
       status.textContent = "Waiting for approval. The owner will meet you to check your papers.";

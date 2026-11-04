@@ -47,10 +47,25 @@ service cloud.firestore {
       allow create: if isSelf(uid)
         && !exists(/databases/$(database)/documents/removedUsers/$(uid))
         && (isNewStudent(request.resource.data) || isNewDriver(request.resource.data));
-      // Only an admin can change a profile, and only the blocked flag.
+      // An admin can change only the blocked flag and who blocked the person (W22).
+      // blockedBy is "owner" when the admin blocks, and it is removed again on unblock.
       allow update: if isAdmin()
-        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['blocked'])
-        && request.resource.data.blocked is bool;
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['blocked', 'blockedBy'])
+        && request.resource.data.blocked is bool
+        && (!('blockedBy' in request.resource.data)
+            || request.resource.data.blockedBy == null
+            || request.resource.data.blockedBy == 'owner');
+      // Automatic block (W22): a person who reported this account can set blocked to true,
+      // but only when the private list of different reporters (reportTally) holds 3 or more
+      // people, and he is one of them. Nothing else can change.
+      allow update: if request.auth != null
+        && resource.data.blocked == false
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['blocked', 'blockedBy'])
+        && request.resource.data.blocked == true
+        && request.resource.data.blockedBy == 'auto'
+        && exists(/databases/$(database)/documents/reportTally/$(uid))
+        && get(/databases/$(database)/documents/reportTally/$(uid)).data.reporters.size() >= 3
+        && request.auth.uid in get(/databases/$(database)/documents/reportTally/$(uid)).data.reporters;
       // An admin can remove a profile (the login in Authentication stays).
       allow delete: if isAdmin();
     }
@@ -216,7 +231,7 @@ service cloud.firestore {
 
       // The accepting driver answers the student's counter-offer once: either
       // "accepted" (the fare becomes the offer) or "kept" (the fare stays).
-      allow update: if isApprovedDriver()
+      allow update: if isApprovedDriverAny()
         && isSelf(resource.data.driverId)
         && resource.data.status == 'accepted'
         && resource.data.counterOffer != null
@@ -230,7 +245,7 @@ service cloud.firestore {
       // The accepting driver moves his own ride forward: "On the way", then "Completed".
       // "On the way" needs the student's agreement to the fare first. After it, the
       // student can cancel only when 10 minutes have passed (his rule above).
-      allow update: if isApprovedDriver()
+      allow update: if isApprovedDriverAny()
         && isSelf(resource.data.driverId)
         && resource.data.status == 'accepted'
         && (resource.data.get('fareAgreed', false) == true || resource.data.get('counterAnswer', null) == 'accepted')
@@ -238,7 +253,7 @@ service cloud.firestore {
         && request.resource.data.status == 'on_the_way'
         && request.resource.data.startedAt == request.time;
 
-      allow update: if isApprovedDriver()
+      allow update: if isApprovedDriverAny()
         && isSelf(resource.data.driverId)
         && resource.data.status == 'on_the_way'
         && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status', 'completedAt'])
@@ -302,12 +317,20 @@ service cloud.firestore {
                 && get(/databases/$(database)/documents/rides/$(resource.data.rideId)).data.startedAt <= request.time - duration.value(6, 'h')));
     }
 
-    // A signed-in driver who is not blocked and whom the owner has approved.
-    function isApprovedDriver() {
+    // A signed-in driver whom the owner has approved, blocked or not. Used for finishing
+    // a ride he already has (W22): a driver who gets blocked in the middle of a ride can
+    // still move it forward, so the student is never stuck.
+    function isApprovedDriverAny() {
       return request.auth != null
         && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'driver'
-        && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.blocked == false
         && get(/databases/$(database)/documents/drivers/$(request.auth.uid)).data.approvalStatus == 'approved';
+    }
+
+    // A signed-in driver who is not blocked and whom the owner has approved.
+    // Only this driver can see open requests and accept a new ride.
+    function isApprovedDriver() {
+      return isApprovedDriverAny()
+        && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.blocked == false;
     }
 
     // A ride that goes back to the open list: the driver and everything he added
@@ -367,11 +390,12 @@ service cloud.firestore {
         && d.deleteAfter <= request.time + duration.value(31, 'd');
     }
 
-    // ---- reports: a student or a driver flags a problem with a finished ride ----
-    // One report per person per ride (the document id is rideId_reporterId, and a
-    // report can only be created, never changed). Each person can read only his own
-    // reports; the owner reads all of them in the Firebase console, marks them
-    // reviewed, and can block an account there (users/{uid}.blocked = true).
+    // ---- reports (W22) ----
+    // A student or a driver reports the other person on a past ride ("person"), or the
+    // Hatud app ("app"). One report per person per ride and kind: the document id is
+    // rideId_reporterId for a person and rideId_app_reporterId for the app. A report can
+    // only be created, never changed. Each person reads only his own reports; the owner
+    // reads all of them on the admin page.
     match /reports/{reportId} {
       allow read: if isSelf(resource.data.reporterId) || isAdmin();
       // An admin can mark a report new or reviewed, and delete it when it is no longer needed.
@@ -381,28 +405,108 @@ service cloud.firestore {
       allow delete: if isAdmin();
       allow create: if request.auth != null
         && request.resource.data.rideId is string
-        && reportId == request.resource.data.rideId + '_' + request.auth.uid
-        && isNewReport(request.resource.data);
+        && ((request.resource.data.get('targetType', '') == 'person'
+             && reportId == request.resource.data.rideId + '_' + request.auth.uid
+             && isNewPersonReport(request.resource.data))
+            || (request.resource.data.get('targetType', '') == 'app'
+             && reportId == request.resource.data.rideId + '_app_' + request.auth.uid
+             && isNewAppReport(request.resource.data)));
     }
 
-    function isNewReport(d) {
+    // A report about the other person on a ride that had a driver and is finished.
+    // The reporter must also be on the private list of reporters of that person, which
+    // is written in the same save (see reportTally below), so a report cannot skip the count.
+    function isNewPersonReport(d) {
       let ride = get(/databases/$(database)/documents/rides/$(d.rideId)).data;
       let account = get(/databases/$(database)/documents/users/$(request.auth.uid)).data;
-      return d.keys().hasOnly(['rideId', 'reporterId', 'reporterRole', 'reportedId', 'reason', 'details', 'status', 'createdAt'])
-        && d.keys().hasAll(['rideId', 'reporterId', 'reporterRole', 'reportedId', 'reason', 'details', 'status', 'createdAt'])
+      return d.keys().hasOnly(['rideId', 'reporterId', 'reporterRole', 'targetType', 'reportedId', 'reason', 'details', 'status', 'createdAt'])
+        && d.keys().hasAll(['rideId', 'reporterId', 'reporterRole', 'targetType', 'reportedId', 'reason', 'details', 'status', 'createdAt'])
         && account.blocked == false
         && d.reporterId == request.auth.uid
         && d.reporterRole == account.role
-        // The ride had a driver and is finished (completed, or cancelled after a driver accepted).
         && ride.driverId != null
         && ride.status in ['completed', 'cancelled']
-        // The reporter was on this ride, and reports the other person.
         && ((account.role == 'student' && ride.studentId == request.auth.uid && d.reportedId == ride.driverId)
             || (account.role == 'driver' && ride.driverId == request.auth.uid && d.reportedId == ride.studentId))
         && d.reason in ['unreasonable_fare', 'unsafe_or_rude', 'no_show', 'wrong_vehicle', 'refused_to_pay', 'other']
         && d.details is string && d.details.size() <= 200
         && d.status == 'new'
+        && d.createdAt == request.time
+        && existsAfter(/databases/$(database)/documents/reportTally/$(d.reportedId))
+        && request.auth.uid in getAfter(/databases/$(database)/documents/reportTally/$(d.reportedId)).data.reporters;
+    }
+
+    // A report about the app on any past ride the reporter was on (even one that never
+    // got a driver). It never counts toward a block.
+    function isNewAppReport(d) {
+      let ride = get(/databases/$(database)/documents/rides/$(d.rideId)).data;
+      let account = get(/databases/$(database)/documents/users/$(request.auth.uid)).data;
+      return d.keys().hasOnly(['rideId', 'reporterId', 'reporterRole', 'targetType', 'reason', 'details', 'status', 'createdAt'])
+        && d.keys().hasAll(['rideId', 'reporterId', 'reporterRole', 'targetType', 'reason', 'details', 'status', 'createdAt'])
+        && account.blocked == false
+        && d.reporterId == request.auth.uid
+        && d.reporterRole == account.role
+        && ride.status in ['completed', 'cancelled', 'expired']
+        && ((account.role == 'student' && ride.studentId == request.auth.uid)
+            || (account.role == 'driver' && ride.driverId == request.auth.uid))
+        && d.reason in ['app_bug', 'map_wrong', 'slow_or_stuck', 'confusing', 'other']
+        && d.details is string && d.details.size() <= 200
+        && d.status == 'new'
         && d.createdAt == request.time;
+    }
+
+    // ---- reportTally (W22): who reported a person ----
+    // One private document per reported person: the list of DIFFERENT people who reported
+    // him, and the id of the latest report. Only the owner can read it, so the reported
+    // person never learns who reported him. A reporter can add only himself to the list,
+    // and only in the same save that creates his own report about that person.
+    // When the list holds 3 people, a reporter can block the person (see users above).
+    // The owner deletes the document to reset the count when unblocking.
+    match /reportTally/{personId} {
+      allow read: if isAdmin();
+      allow delete: if isAdmin();
+      allow create: if request.auth != null
+        && request.resource.data.keys().hasOnly(['reporters', 'lastReportId'])
+        && request.resource.data.keys().hasAll(['reporters', 'lastReportId'])
+        && request.resource.data.reporters == [request.auth.uid]
+        && isReportProof(personId, request.resource.data.lastReportId);
+      allow update: if request.auth != null
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['reporters', 'lastReportId'])
+        && ((!(request.auth.uid in resource.data.reporters)
+             && request.resource.data.reporters == resource.data.reporters.concat([request.auth.uid]))
+            || (request.auth.uid in resource.data.reporters
+                && request.resource.data.reporters == resource.data.reporters))
+        && isReportProof(personId, request.resource.data.lastReportId);
+    }
+
+    // The save that changes a tally must also create a real report by the same person
+    // about the same person.
+    function isReportProof(personId, reportId) {
+      return reportId is string
+        && !exists(/databases/$(database)/documents/reports/$(reportId))
+        && existsAfter(/databases/$(database)/documents/reports/$(reportId))
+        && getAfter(/databases/$(database)/documents/reports/$(reportId)).data.reporterId == request.auth.uid
+        && getAfter(/databases/$(database)/documents/reports/$(reportId)).data.reportedId == personId
+        && getAfter(/databases/$(database)/documents/reports/$(reportId)).data.targetType == 'person';
+    }
+
+    // ---- appeals (W22) ----
+    // A blocked person can send ONE appeal at a time (the document id is his own id, and
+    // he cannot change it afterwards). The owner can deny it, or delete it so he can appeal
+    // again. Unblocking deletes it.
+    match /appeals/{uid} {
+      allow read: if isSelf(uid) || isAdmin();
+      allow create: if isSelf(uid)
+        && get(/databases/$(database)/documents/users/$(uid)).data.blocked == true
+        && request.resource.data.keys().hasOnly(['message', 'status', 'createdAt'])
+        && request.resource.data.keys().hasAll(['message', 'status', 'createdAt'])
+        && isText(request.resource.data.message, 300)
+        && request.resource.data.status == 'new'
+        && request.resource.data.createdAt == request.time;
+      allow update: if isAdmin()
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status'])
+        && request.resource.data.status in ['new', 'denied'];
+      allow delete: if isAdmin();
     }
 
     // Everything not listed above is denied.

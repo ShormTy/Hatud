@@ -1,4 +1,4 @@
-// Admin page for the owner: approve drivers, block accounts, read reports.
+// Admin page for the owner: approve drivers, block accounts, read reports and appeals.
 // Anyone can open this page, but the rules show data only to a signed-in admin
 // (a document at admins/{uid} that the owner makes by hand in the Firebase console).
 import { auth, db } from "./firebase.js";
@@ -10,6 +10,7 @@ import {
   collection,
   updateDoc,
   deleteDoc,
+  deleteField,
   writeBatch,
   serverTimestamp
 } from "https://www.gstatic.com/firebasejs/12.3.0/firebase-firestore.js";
@@ -21,7 +22,12 @@ const REASONS = {
   no_show: "Did not show up",
   wrong_vehicle: "Wrong vehicle or plate",
   refused_to_pay: "Refused to pay",
-  other: "Something else"
+  other: "Something else",
+  // reasons for reports about the app (W22)
+  app_bug: "Something is broken (a bug)",
+  map_wrong: "The map or the route is wrong",
+  slow_or_stuck: "The app is slow or stuck",
+  confusing: "Something is confusing"
 };
 
 let users = new Map();
@@ -29,6 +35,8 @@ let drivers = new Map();
 let reports = [];
 let admins = new Set();
 let removed = new Map();
+let tallies = new Map(); // reportTally: uid -> { reporters: [ids of DIFFERENT people who reported him] }
+let appeals = new Map(); // appeals: uid -> { message, status, createdAt }
 let tab = "drivers";
 
 // Everything people typed is shown with textContent, never as HTML.
@@ -78,9 +86,36 @@ async function change(task, ask) {
 }
 
 const setBlocked = (uid, value) => change(async () => {
-  await updateDoc(doc(db, "users", uid), { blocked: value });
-  users.get(uid).blocked = value;
-}, (value ? "Block " : "Unblock ") + who(uid) + "?");
+  if (value) {
+    await updateDoc(doc(db, "users", uid), { blocked: true, blockedBy: "owner" });
+    users.get(uid).blocked = true;
+    users.get(uid).blockedBy = "owner";
+  } else {
+    // Unblocking also clears the list of people who reported him (so one new report does not
+    // block him again at once) and closes his appeal.
+    const batch = writeBatch(db);
+    batch.update(doc(db, "users", uid), { blocked: false, blockedBy: deleteField() });
+    batch.delete(doc(db, "reportTally", uid));
+    batch.delete(doc(db, "appeals", uid));
+    await batch.commit();
+    users.get(uid).blocked = false;
+    delete users.get(uid).blockedBy;
+    tallies.delete(uid);
+    appeals.delete(uid);
+  }
+}, value
+  ? "Block " + who(uid) + "?"
+  : "Unblock " + who(uid) + "?\n\nThis also clears the count of people who reported this person and closes his appeal.");
+
+const denyAppeal = (uid) => change(async () => {
+  await updateDoc(doc(db, "appeals", uid), { status: "denied" });
+  appeals.get(uid).status = "denied";
+}, "Deny the appeal of " + who(uid) + "? He stays blocked and cannot send another appeal until you delete this one.");
+
+const deleteAppeal = (uid) => change(async () => {
+  await deleteDoc(doc(db, "appeals", uid));
+  appeals.delete(uid);
+}, "Delete the appeal of " + who(uid) + "? If he is still blocked, he can send a new appeal.");
 
 const setApproval = (uid, status) => change(async () => {
   await updateDoc(doc(db, "drivers", uid), { approvalStatus: status });
@@ -105,10 +140,14 @@ async function removePerson(uid) {
     batch.set(doc(db, "removedUsers", uid), { ...note, removedAt: serverTimestamp() });
     batch.delete(doc(db, "users", uid));
     if (d) batch.delete(doc(db, "drivers", uid));
+    batch.delete(doc(db, "reportTally", uid));
+    batch.delete(doc(db, "appeals", uid));
     await batch.commit();
     removed.set(uid, { ...note, removedAt: { toDate: () => new Date() } });
     users.delete(uid);
     drivers.delete(uid);
+    tallies.delete(uid);
+    appeals.delete(uid);
     done = true;
   }, "Remove " + who(uid) + "?\n\nThis deletes the profile (and the driver record). The login stays in Firebase Authentication, so the email stays taken until you delete it there. To keep someone out for good, use Block instead.");
   if (done) say("Removed. UID: " + uid + ". To free the email: Firebase console, Authentication, Users, three dots, Delete account.");
@@ -150,6 +189,25 @@ function blockButton(uid, suffix) {
   return button((u.blocked ? "Unblock" : "Block") + (suffix || ""), "secondary", () => setBlocked(uid, !u.blocked));
 }
 
+// Shows how many DIFFERENT people reported this person (the private list the rules keep).
+function tallyLine(card, uid) {
+  const t = tallies.get(uid);
+  if (!t) return;
+  const n = (t.reporters || []).length;
+  card.append(line("Reported by:", n + " different " + (n === 1 ? "person" : "people")));
+  const u = users.get(uid);
+  if (n >= 3 && u && !u.blocked) {
+    card.append(el("p", "Three or more people reported this person but the automatic block did not finish. Press Block.", "hint"));
+  }
+}
+
+function blockedWhy(uid, u) {
+  const n = ((tallies.get(uid) || {}).reporters || []).length;
+  if (u.blockedBy === "auto") return "automatically, after reports from " + n + " different " + (n === 1 ? "person" : "people");
+  if (u.blockedBy === "owner") return "by the owner";
+  return "earlier (no record of who blocked)";
+}
+
 function driverCard(uid, d) {
   const u = users.get(uid) || {};
   const card = el("div", null, "history-item");
@@ -158,6 +216,7 @@ function driverCard(uid, d) {
   card.append(line("Vehicle:", d.vehicleType + ", plate " + d.plateNumber));
   card.append(line("Contact:", d.contactNumber));
   card.append(line("Signed up:", when(u.createdAt)));
+  tallyLine(card, uid);
   card.append(d.approvalStatus === "approved"
     ? button("Set to pending", "secondary", () => setApproval(uid, "pending"))
     : button("Approve", "primary", () => setApproval(uid, "approved")));
@@ -175,6 +234,7 @@ function personCard(uid, u, canBlock) {
   card.append(line("Contact:", u.contactNumber));
   card.append(line("Signed up:", when(u.createdAt)));
   card.append(line("ID:", uid));
+  tallyLine(card, uid);
   if (canBlock) {
     card.append(blockButton(uid));
     card.append(button("Remove", "secondary", () => removePerson(uid)));
@@ -182,17 +242,62 @@ function personCard(uid, u, canBlock) {
   return card;
 }
 
-function reportCard(r) {
+function blockedCard(uid, u) {
   const card = el("div", null, "history-item");
-  card.append(el("p", (REASONS[r.reason] || r.reason) + (r.status === "new" ? " (NEW)" : " (reviewed)"), "panel-title"));
+  card.append(el("p", u.name || uid, "panel-title"));
+  card.append(line("Role:", u.role));
+  card.append(line("Blocked:", blockedWhy(uid, u)));
+  const d = drivers.get(uid);
+  if (d) card.append(line("Vehicle:", d.vehicleType + ", plate " + d.plateNumber));
+  card.append(line("Contact:", u.contactNumber));
+  card.append(line("Reports about this person:", String(reports.filter((r) => r.reportedId === uid).length)));
+  const a = appeals.get(uid);
+  if (a) {
+    card.append(line("Appeal:", (a.status === "denied" ? "denied" : "NEW") + ", sent " + when(a.createdAt)));
+    card.append(line("Message:", a.message));
+  } else {
+    card.append(line("Appeal:", "none"));
+  }
+  card.append(line("ID:", uid));
+  card.append(button("Unblock", "primary", () => setBlocked(uid, false)));
+  return card;
+}
+
+function appealCard(uid, a) {
+  const u = users.get(uid);
+  const card = el("div", null, "history-item");
+  card.append(el("p", ((u && u.name) || uid) + (a.status === "denied" ? " (denied)" : " (NEW)"), "panel-title"));
+  if (u) {
+    card.append(line("Role:", u.role));
+    card.append(line("Contact:", u.contactNumber));
+    card.append(line("Account:", u.blocked ? "blocked, " + blockedWhy(uid, u) : "not blocked"));
+  } else {
+    card.append(line("Account:", "no profile"));
+  }
+  card.append(line("Message:", a.message));
+  card.append(line("Sent:", when(a.createdAt)));
+  card.append(line("ID:", uid));
+  if (u && u.blocked) card.append(button("Unblock (accept appeal)", "primary", () => setBlocked(uid, false)));
+  if (a.status !== "denied") card.append(button("Deny appeal", "secondary", () => denyAppeal(uid)));
+  card.append(button("Delete appeal", "secondary", () => deleteAppeal(uid)));
+  if (a.status === "denied") card.append(el("p", "Deleting a denied appeal lets him send a new one.", "hint"));
+  return card;
+}
+
+function reportCard(r) {
+  const isApp = r.targetType === "app";
+  const card = el("div", null, "history-item");
+  card.append(el("p", (isApp ? "About the app: " : "") + (REASONS[r.reason] || r.reason) + (r.status === "new" ? " (NEW)" : " (reviewed)"), "panel-title"));
   if (r.details) card.append(line("Details:", r.details));
   card.append(line("From:", who(r.reporterId)));
-  card.append(line("About:", who(r.reportedId)));
+  if (!isApp) card.append(line("About:", who(r.reportedId)));
   card.append(line("Sent:", when(r.createdAt)));
   card.append(button(r.status === "new" ? "Mark reviewed" : "Mark new", "secondary",
     () => setReportStatus(r, r.status === "new" ? "reviewed" : "new")));
-  const b = blockButton(r.reportedId, " the reported person");
-  if (b) card.append(b);
+  if (!isApp) {
+    const b = blockButton(r.reportedId, " the reported person");
+    if (b) card.append(b);
+  }
   card.append(button("Delete report", "secondary", () => removeReport(r)));
   return card;
 }
@@ -201,9 +306,13 @@ function render() {
   const pending = [...drivers.values()].filter((d) => d.approvalStatus !== "approved").length;
   const fresh = reports.filter((r) => r.status === "new").length;
   const students = [...users].filter(([uid, u]) => u.role === "student" && !admins.has(uid));
+  const blockedPeople = [...users].filter(([uid, u]) => u.blocked === true && !admins.has(uid));
+  const newAppeals = [...appeals.values()].filter((a) => a.status !== "denied").length;
   const names = {
     drivers: "Drivers (" + drivers.size + (pending ? ", " + pending + " waiting" : "") + ")",
     students: "Students (" + students.length + ")",
+    blocked: "Blocked (" + blockedPeople.length + ")",
+    appeals: "Appeals (" + newAppeals + " new)",
     admins: "Admins (" + admins.size + ")",
     removed: "Removed (" + removed.size + ")",
     reports: "Reports (" + fresh + " new)"
@@ -231,6 +340,13 @@ function render() {
     students.filter(([uid, u]) => match(u.name + " " + u.contactNumber + " " + uid))
       .sort(byName)
       .forEach(([uid, u]) => cards.push(personCard(uid, u, true)));
+  } else if (tab === "blocked") {
+    blockedPeople.sort(byName).forEach(([uid, u]) => cards.push(blockedCard(uid, u)));
+  } else if (tab === "appeals") {
+    // New appeals first, then the newest.
+    [...appeals].sort(([, a], [, b]) => (b.status !== "denied") - (a.status !== "denied")
+      || (b.createdAt?.toMillis?.() || 0) - (a.createdAt?.toMillis?.() || 0))
+      .forEach(([uid, a]) => cards.push(appealCard(uid, a)));
   } else if (tab === "removed") {
     [...removed].sort(([, a], [, b]) => (b.removedAt?.toMillis?.() || Date.now()) - (a.removedAt?.toMillis?.() || Date.now()))
       .forEach(([uid, n]) => cards.push(removedCard(uid, n)));
@@ -252,7 +368,9 @@ function render() {
 async function load() {
   say("Loading…");
   try {
-    const [u, d, r, a, x] = await Promise.all(["users", "drivers", "reports", "admins", "removedUsers"].map((name) => getDocs(collection(db, name))));
+    const [u, d, r, a, x, t, p] = await Promise.all(["users", "drivers", "reports", "admins", "removedUsers", "reportTally", "appeals"].map((name) => getDocs(collection(db, name))));
+    tallies = new Map(t.docs.map((y) => [y.id, y.data()]));
+    appeals = new Map(p.docs.map((y) => [y.id, y.data()]));
     removed = new Map(x.docs.map((y) => [y.id, y.data()]));
     users = new Map(u.docs.map((x) => [x.id, x.data()]));
     drivers = new Map(d.docs.map((x) => [x.id, x.data()]));

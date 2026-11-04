@@ -2,7 +2,8 @@
 // see the open request, cancel it.
 import { requireRole, logOut } from "./session.js";
 import { db } from "./firebase.js";
-import { addReportControls, loadReported } from "./report.js";
+import { addReportControls, loadReported, disableReporting } from "./report.js";
+import { showAppeal } from "./appeal.js";
 import { confirmBox } from "./dialog.js";
 import { SUPPORT_EMAIL } from "./support.js";
 import {
@@ -736,6 +737,8 @@ requireRole("student")
       requestButton.disabled = true;
       requestButton.textContent = "Account blocked";
       say(BLOCKED_TEXT);
+      disableReporting(); // a blocked person cannot send reports (W22)
+      showAppeal({ uid: session.user.uid, profile: session.profile, before: byId("history") });
     }
     startWatchingMe();
     await showCurrentState();
