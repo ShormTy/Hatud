@@ -43,6 +43,31 @@
     <p class="status" id="status">Loading…</p>
   </section>
 
+  <section class="panel hidden" id="profile-panel">
+    <h2 class="panel-title">My profile</h2>
+    <p class="ride-line"><strong>Name:</strong> <span id="profile-name"></span></p>
+    <p class="ride-line hidden" id="profile-school-line"><strong>School:</strong> <span id="profile-school"></span></p>
+    <p class="ride-line"><strong>Contact number:</strong> <span id="profile-contact"></span></p>
+    <p class="hint hidden" id="profile-note" role="alert"></p>
+    <button class="secondary" id="profile-edit" type="button">Edit my profile</button>
+    <div id="profile-form" class="hidden">
+      <label for="p-name">Full name</label>
+      <input id="p-name" type="text" autocomplete="name" maxlength="60">
+
+      <div id="p-school-row" class="hidden">
+        <label for="p-school">School</label>
+        <input id="p-school" type="text" maxlength="80">
+      </div>
+
+      <label for="p-contact">Contact number</label>
+      <input id="p-contact" type="tel" autocomplete="tel" inputmode="tel" maxlength="20" placeholder="09xx xxx xxxx">
+
+      <button class="primary" id="profile-save" type="button">Save</button>
+      <button class="secondary" id="profile-cancel" type="button">Cancel</button>
+      <p class="hint hidden" id="profile-hint">If you change your name, your account goes back to pending until the owner checks you again.</p>
+    </div>
+  </section>
+
   <!-- Drivers only -->
   <section class="panel hidden" id="vehicle-panel">
     <h2 class="panel-title">My vehicle</h2>

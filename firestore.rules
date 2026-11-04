@@ -82,6 +82,25 @@ service cloud.firestore {
              && request.resource.data.get('deleteRequestedAt', null) == request.time)
             || (resource.data.get('deleteRequestedAt', null) != null
                 && request.resource.data.get('deleteRequestedAt', null) == null));
+      // W27e (Edit my profile): a person can change his own name, contact number and, for a
+      // student, school. A blocked person cannot (the block is by name). A driver's contact
+      // number must change in the SAME save in his drivers record, and when his NAME changes the
+      // same save must leave him pending (an approved driver goes back to pending: the owner
+      // approved a person he met under that name). The page also refuses while a ride is open.
+      allow update: if isSelf(uid)
+        && resource.data.blocked == false
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['name', 'contactNumber', 'school'])
+        && isText(request.resource.data.name, 60)
+        && isPhone(request.resource.data.contactNumber)
+        && ((resource.data.role == 'student'
+             && isText(request.resource.data.school, 80))
+            || (resource.data.role == 'driver'
+                && !('school' in request.resource.data)
+                && (request.resource.data.contactNumber == resource.data.contactNumber
+                    || getAfter(/databases/$(database)/documents/drivers/$(uid)).data.contactNumber
+                       == request.resource.data.contactNumber)
+                && (request.resource.data.name == resource.data.name
+                    || getAfter(/databases/$(database)/documents/drivers/$(uid)).data.approvalStatus == 'pending')));
       // An admin can remove a profile (the login in Authentication stays). A person can delete
       // his own profile (W10b, Delete my account) only when 24 hours have passed since he asked
       // (W10c), he is not blocked (so a blocked person cannot wipe his account and sign up again,
@@ -137,6 +156,20 @@ service cloud.firestore {
         && request.resource.data.approvalStatus == 'pending'
         && isText(request.resource.data.vehicleType, 30)
         && isText(request.resource.data.plateNumber, 12);
+      // W27e: a driver's contact number changes here in the same save as his profile (the users
+      // rule checks this record with getAfter), and a NAME change in the same save puts an
+      // approved driver back to pending. He can never set "approved" himself.
+      allow update: if isSelf(uid)
+        && resource.data.approvalStatus in ['approved', 'pending']
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['contactNumber', 'approvalStatus'])
+        && isPhone(request.resource.data.contactNumber)
+        && (!request.resource.data.diff(resource.data).affectedKeys().hasAny(['contactNumber'])
+            || getAfter(/databases/$(database)/documents/users/$(uid)).data.contactNumber
+               == request.resource.data.contactNumber)
+        && (request.resource.data.approvalStatus == resource.data.approvalStatus
+            || (request.resource.data.approvalStatus == 'pending'
+                && getAfter(/databases/$(database)/documents/users/$(uid)).data.name
+                   != get(/databases/$(database)/documents/users/$(uid)).data.name));
       // An admin can switch approvalStatus (and nothing else) between approved and pending.
       allow update: if isAdmin()
         && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['approvalStatus', 'approvedAt'])

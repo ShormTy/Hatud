@@ -1,7 +1,7 @@
 // Account settings page (W31), for students and drivers. Each person sees only his own settings.
 //  - Drivers: change the vehicle or plate number (an approved driver goes back to pending).
 //  - Everyone: Delete my account (the 24-hour countdown, Undo and the password step).
-// Edit my profile (W27e) will be added here.
+//  - Everyone: Edit my profile (W27e): name, contact number and, for students, school.
 import { requireMember, logOut } from "./session.js";
 import { db } from "./firebase.js";
 import { makeCaps } from "./caps.js";
@@ -15,7 +15,8 @@ import {
   collection,
   query,
   where,
-  updateDoc
+  updateDoc,
+  writeBatch
 } from "https://www.gstatic.com/firebasejs/12.3.0/firebase-firestore.js";
 
 const byId = (id) => document.getElementById(id);
@@ -23,6 +24,8 @@ const status = byId("status");
 const note = byId("note");
 let me = null;        // { user, profile }
 let vehicle = null;   // the driver's record (vehicle type, plate, approval)
+const PHONE_PATTERN = /^[0-9+() -]{7,20}$/; // the same as the sign-up page and firestore.rules
+const FINISHED = ["completed", "cancelled", "expired"];
 
 byId("signout").addEventListener("click", () => logOut());
 
@@ -53,8 +56,18 @@ function showVehicleLine() {
     (vehicle.approvalStatus === "approved" ? "" : " (waiting for the owner’s approval)");
 }
 
+// True while the person has a ride that is not finished: a student with an open request or
+// an unfinished ride, a driver with a ride that is accepted or on the way. Changes to the
+// vehicle or the profile wait until then, because a ride keeps the details shown at the start.
 async function hasActiveRide() {
-  const mine = await getDocs(query(collection(db, "rides"), where("driverId", "==", me.user.uid)));
+  const uid = me.user.uid;
+  if (me.profile.role === "student") {
+    const lock = await getDoc(doc(db, "locks", uid));
+    if (lock.exists()) return true;
+    const mine = await getDocs(query(collection(db, "rides"), where("studentId", "==", uid)));
+    return mine.docs.some((d) => !FINISHED.includes(d.data().status));
+  }
+  const mine = await getDocs(query(collection(db, "rides"), where("driverId", "==", uid)));
   return mine.docs.some((d) => ["accepted", "on_the_way"].includes(d.data().status));
 }
 
@@ -126,6 +139,128 @@ async function saveVehicle() {
   }
 }
 
+// ---------- Edit my profile (W27e) ----------
+// Name, contact number and, for students, school. A driver's contact number is saved in his
+// users record and his drivers record in ONE save. When an APPROVED driver changes his NAME,
+// he goes back to pending (the owner approved a person he met under that name); a driver who
+// is already pending can fix a typo without the warning.
+
+const profileNote = byId("profile-note");
+let isDriverRole = false;
+
+function sayProfile(text) {
+  profileNote.textContent = text;
+  profileNote.classList.toggle("hidden", !text);
+}
+
+function drawProfile() {
+  const p = me.profile;
+  byId("profile-name").textContent = p.name;
+  byId("profile-contact").textContent = p.contactNumber;
+  const isStudent = p.role === "student";
+  byId("profile-school-line").classList.toggle("hidden", !isStudent);
+  if (isStudent) byId("profile-school").textContent = p.school;
+}
+
+function closeProfileForm() {
+  byId("profile-form").classList.add("hidden");
+  byId("profile-edit").classList.remove("hidden");
+}
+
+async function openProfileForm() {
+  sayProfile("");
+  try {
+    if (await hasActiveRide()) {
+      sayProfile("Please finish or cancel your current ride before editing your profile.");
+      return;
+    }
+  } catch (error) {
+    sayProfile(friendlyError(error));
+    return;
+  }
+  const p = me.profile;
+  byId("p-name").value = p.name;
+  byId("p-contact").value = p.contactNumber;
+  byId("p-school-row").classList.toggle("hidden", p.role !== "student");
+  if (p.role === "student") byId("p-school").value = p.school;
+  byId("profile-hint").classList.toggle("hidden", !isDriverRole);
+  byId("profile-form").classList.remove("hidden");
+  byId("profile-edit").classList.add("hidden");
+}
+
+async function saveProfile() {
+  sayProfile("");
+  const p = me.profile;
+  const isStudent = p.role === "student";
+  const name = byId("p-name").value.trim();
+  const contactNumber = byId("p-contact").value.trim();
+  const school = isStudent ? byId("p-school").value.trim() : null;
+
+  if (!name) { sayProfile("Please type your full name."); return; }
+  if (isStudent && !school) { sayProfile("Please type your school."); return; }
+  if (!PHONE_PATTERN.test(contactNumber)) {
+    sayProfile("Please type a contact number (digits only, or with + and spaces).");
+    return;
+  }
+
+  const nameChanged = name !== p.name;
+  const phoneChanged = contactNumber !== p.contactNumber;
+  const schoolChanged = isStudent && school !== p.school;
+  if (!nameChanged && !phoneChanged && !schoolChanged) {
+    sayProfile("Nothing changed.");
+    closeProfileForm();
+    return;
+  }
+
+  const button = byId("profile-save");
+  button.disabled = true;
+  try {
+    if (await hasActiveRide()) {
+      sayProfile("Please finish or cancel your current ride before editing your profile.");
+      return;
+    }
+    const goesPending = isDriverRole && nameChanged && vehicle && vehicle.approvalStatus === "approved";
+    if (goesPending) {
+      const ok = await confirmBox({
+        title: "Are you sure?",
+        message: "Changing your name puts your account back to pending. You will not see or accept ride requests until the owner checks you again.",
+        okText: "Yes, change it",
+        cancelText: "No, keep it",
+        danger: true
+      });
+      if (!ok) return;
+    }
+
+    const batch = writeBatch(db);
+    batch.update(doc(db, "users", me.user.uid), isStudent ? { name, contactNumber, school } : { name, contactNumber });
+    if (isDriverRole && vehicle && (phoneChanged || goesPending)) {
+      const change = {};
+      if (phoneChanged) change.contactNumber = contactNumber;
+      if (goesPending) change.approvalStatus = "pending";
+      batch.update(doc(db, "drivers", me.user.uid), change);
+    }
+    await batch.commit();
+
+    if (goesPending) {
+      window.alert("Saved. Your account is now pending: the owner will check you again before you can accept rides.");
+      window.location.reload(); // the page starts again as a pending driver
+      return;
+    }
+    p.name = name;
+    p.contactNumber = contactNumber;
+    if (isStudent) p.school = school;
+    if (vehicle && phoneChanged) vehicle.contactNumber = contactNumber;
+    byId("hello").textContent = name;
+    drawProfile();
+    closeProfileForm();
+    sayProfile("Saved.");
+  } catch (error) {
+    sayProfile(friendlyError(error));
+  } finally {
+    button.disabled = false;
+  }
+}
+
 // ---------- Start ----------
 
 requireMember()
@@ -136,6 +271,20 @@ requireMember()
     byId("back-link").href = role === "driver" ? "driver.html" : "student.html";
     if (window.HatudSidebar) window.HatudSidebar.setRole(role);
     status.classList.add("hidden");
+    isDriverRole = role === "driver";
+
+    byId("profile-panel").classList.remove("hidden");
+    drawProfile();
+
+    if (session.profile.blocked === true) {
+      // A blocked person cannot change his details (the block is by name).
+      byId("profile-edit").classList.add("hidden");
+      sayProfile("A blocked account can’t be edited here. Write to " + SUPPORT_EMAIL + ".");
+    } else {
+      byId("profile-edit").onclick = openProfileForm;
+      byId("profile-cancel").onclick = closeProfileForm;
+      byId("profile-save").onclick = saveProfile;
+    }
 
     if (role === "driver") {
       const snap = await getDoc(doc(db, "drivers", session.user.uid));
