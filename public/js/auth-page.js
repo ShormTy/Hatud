@@ -239,10 +239,6 @@ form.addEventListener("submit", async (event) => {
         showMessage(result.error);
         return;
       }
-      if (byId("email2").value.trim().toLowerCase() !== email.toLowerCase()) {
-        showMessage("The two emails are not the same. Please check them.");
-        return;
-      }
       await signUp(email, password, result.data);
     } else {
       await signInWithEmailAndPassword(auth, email, password);

@@ -243,12 +243,10 @@ export function mountDeleteAccount({ role, user, profile }) {
       ? "Your account will be deleted on " + whenText(ready) + ". You can undo this at the bottom of the page."
       : "The 24 hours are over. You can finish deleting your account, or undo it, at the bottom of the page.";
     banner.appendChild(make("p", text, "ride-line"));
-    const keep = make("button", "Undo and keep my account", "secondary");
-    keep.type = "button";
-    const note = messageLine();
-    keep.onclick = () => undo(note.show);
-    banner.appendChild(keep);
-    banner.appendChild(note.line);
+    // Only a link: the one Undo button is under My account (W28).
+    const jump = make("a", "Go to My account");
+    jump.href = "#delete-panel";
+    banner.appendChild(jump);
   }
 
   function render() {
