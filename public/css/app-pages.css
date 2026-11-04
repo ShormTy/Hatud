@@ -142,3 +142,66 @@ input[type="datetime-local"] { min-height: 46px; }
 /* Collapsible past rides panel (student and driver pages) */
 details.panel > summary { cursor: pointer; }
 details.panel:not([open]) > summary { margin-bottom: 0; }
+
+/* Sidebar (W32): menu button in the top bar, sidebar with name, theme and Sign out.
+   Narrow screens: slides over the page. Wide screens (900px and up): a column
+   next to the page that the menu button collapses or expands. Colors come from
+   the theme variables, so light and dark work without extra rules. */
+.menu-btn { display: inline-flex; align-items: center; justify-content: center; flex: none; padding: 8px 10px; line-height: 0; }
+.sidebar {
+  position: fixed;
+  top: 0;
+  bottom: 0;
+  left: 0;
+  z-index: 1500;
+  width: 260px;
+  max-width: 85vw;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  padding: 14px 16px;
+  overflow-y: auto;
+  background: var(--card);
+  color: var(--text);
+  border-right: 1px solid var(--line);
+  box-shadow: 4px 0 18px rgba(0, 0, 0, 0.25);
+  transform: translateX(-100%);
+  visibility: hidden;
+  transition: transform 0.2s ease, visibility 0s linear 0.2s;
+}
+.sidebar.sb-open { transform: none; visibility: visible; transition: transform 0.2s ease; }
+.sb-backdrop { display: none; position: fixed; top: 0; right: 0; bottom: 0; left: 0; z-index: 1400; background: rgba(0, 0, 0, 0.45); }
+body.sb-overlay .sb-backdrop { display: block; }
+.sb-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+.sb-head strong { color: var(--brand); font-size: 20px; }
+.sb-who { padding: 10px 12px; border: 1px solid var(--line); border-radius: 10px; background: var(--bg); }
+.sb-who #hello { display: block; font-size: 15px; font-weight: 600; overflow-wrap: anywhere; color: var(--text); }
+.sb-role { display: block; margin-top: 2px; font-size: 13px; color: var(--muted); }
+.sb-links { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 6px; }
+.sb-link {
+  display: block;
+  width: 100%;
+  padding: 10px 12px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: transparent;
+  color: var(--text);
+  font-size: 15px;
+  text-align: left;
+  text-decoration: none;
+  cursor: pointer;
+}
+.sb-row { display: flex; align-items: center; gap: 10px; }
+.sb-row .sb-label { flex: 1; font-size: 15px; }
+.sb-row .sb-value { font-size: 14px; color: var(--muted); }
+.sb-foot { margin-top: auto; }
+.sb-foot .link-button { width: 100%; padding: 11px; font-size: 15px; }
+.sidebar a:focus-visible, .sidebar button:focus-visible, .menu-btn:focus-visible { outline: 2px solid var(--brand); outline-offset: 2px; }
+@media (min-width: 900px) {
+  .sidebar { box-shadow: none; }
+  .sidebar, .sidebar.sb-open { transition: none; }
+  body.sb-docked { padding-left: 260px; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .sidebar, .sidebar.sb-open { transition: none; }
+}
