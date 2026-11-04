@@ -15,9 +15,8 @@
   "use strict";
 
   var KEY = "hatud-sidebar";
-  // When the account page (W31) exists, set this to "account.html".
-  // While it is null, no Account settings link is shown.
-  var ACCOUNT_PAGE = null;
+  // The account page (W31). Set it to null to hide the Account settings link.
+  var ACCOUNT_PAGE = "account.html";
   var ROLES = { student: "Student", driver: "Driver", admin: "Admin" };
 
   var wideQuery = window.matchMedia ? window.matchMedia("(min-width: 900px)") : null;
@@ -46,11 +45,20 @@
     window.dispatchEvent(ev);
   }
 
+  // The account page is used by students and drivers, so its script tells the
+  // sidebar who is signed in once it knows: HatudSidebar.setRole("driver").
+  var pendingRole = null;
+  var applyRole = null;
+  window.HatudSidebar = {
+    setRole: function (r) { pendingRole = r; if (applyRole) applyRole(r); }
+  };
+
   function init() {
     var bar = document.querySelector(".topbar");
     if (!bar || document.getElementById("sidebar")) return;
     var body = document.body;
-    var role = body.getAttribute("data-role") || "";
+    var role = pendingRole || body.getAttribute("data-role") || "";
+    var onAccountPage = body.getAttribute("data-page") === "account";
 
     // --- Menu button (first thing in the top bar) ---
     var menuBtn = el("button", "link-button menu-btn");
@@ -83,35 +91,50 @@
     var hello = document.getElementById("hello") || el("span");
     hello.id = "hello";
     who.appendChild(hello);
-    who.appendChild(el("small", "sb-role", ROLES[role] || ""));
+    var roleLabel = el("small", "sb-role", ROLES[role] || "");
+    who.appendChild(roleLabel);
     nav.appendChild(who);
 
-    // Links
+    // Links (drawn again if the page tells us the role later)
     var links = el("ul", "sb-links");
     function addItem(node) {
       var li = document.createElement("li");
       li.appendChild(node);
       links.appendChild(li);
     }
-    if (role !== "admin" && ACCOUNT_PAGE) {
-      var account = el("a", "sb-link", "Account settings");
-      account.href = ACCOUNT_PAGE;
-      addItem(account);
+    function drawLinks() {
+      links.innerHTML = "";
+      if (onAccountPage && (role === "student" || role === "driver")) {
+        var back = el("a", "sb-link", "Back to my rides");
+        back.href = role === "driver" ? "driver.html" : "student.html";
+        addItem(back);
+      } else if ((role === "student" || role === "driver") && ACCOUNT_PAGE) {
+        var account = el("a", "sb-link", "Account settings");
+        account.href = ACCOUNT_PAGE;
+        addItem(account);
+      }
+      if (role === "admin") {
+        var tabsLink = el("button", "sb-link", "Admin tabs");
+        tabsLink.type = "button";
+        tabsLink.addEventListener("click", function () {
+          var tabs = document.getElementById("tabs");
+          if (!tabs) return;
+          if (!isWide()) setOpen(false, false);
+          tabs.scrollIntoView();
+          var first = tabs.querySelector("button");
+          if (first) first.focus();
+        });
+        addItem(tabsLink);
+      }
+      links.classList.toggle("hidden", !links.children.length);
     }
-    if (role === "admin") {
-      var tabsLink = el("button", "sb-link", "Admin tabs");
-      tabsLink.type = "button";
-      tabsLink.addEventListener("click", function () {
-        var tabs = document.getElementById("tabs");
-        if (!tabs) return;
-        if (!isWide()) setOpen(false, false);
-        tabs.scrollIntoView();
-        var first = tabs.querySelector("button");
-        if (first) first.focus();
-      });
-      addItem(tabsLink);
-    }
-    if (links.children.length) nav.appendChild(links);
+    drawLinks();
+    nav.appendChild(links);
+    applyRole = function (r) {
+      role = r;
+      roleLabel.textContent = ROLES[r] || "";
+      drawLinks();
+    };
 
     // Theme switch: the button made by theme.js moves here.
     var themeRow = el("div", "sb-row");

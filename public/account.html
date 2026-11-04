@@ -1,0 +1,73 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="robots" content="noindex">
+  <title>Hatud: Account settings</title>
+  <link rel="stylesheet" href="css/app.css">
+  <link rel="stylesheet" href="css/app-pages.css">
+  <link rel="manifest" href="manifest.webmanifest">
+  <meta name="theme-color" content="#11171d">
+  <meta name="color-scheme" content="light dark">
+  <script src="js/theme.js"></script>
+  <link rel="icon" href="icons/icon.svg" type="image/svg+xml">
+  <link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
+  <script src="js/pwa.js" defer></script>
+</head>
+<body class="app-page" data-page="account">
+  <header class="topbar">
+    <svg class="logo-mini" viewBox="56 140 400 232" aria-hidden="true">
+      <g transform="translate(14 0)" fill="currentColor">
+        <rect class="streak s1" x="100" y="185" width="68" height="22" rx="11" fill-opacity=".5"/>
+        <rect class="streak s2" x="70" y="245" width="98" height="22" rx="11" fill-opacity=".85"/>
+        <rect class="streak s3" x="112" y="305" width="56" height="22" rx="11" fill-opacity=".5"/>
+        <g class="logo-h">
+          <g transform="translate(256 256) skewX(-14) translate(-256 -256)">
+            <rect x="206" y="156" width="56" height="200" rx="14"/>
+            <rect x="330" y="156" width="56" height="200" rx="14"/>
+            <rect x="206" y="232" width="180" height="48" rx="10"/>
+          </g>
+        </g>
+      </g>
+    </svg>
+    <strong>Hatud</strong>
+    <span id="hello"></span>
+    <button class="link-button" id="signout" type="button">Sign out</button>
+  </header>
+  <script src="js/sidebar.js" defer></script>
+
+  <section class="panel">
+    <h2 class="panel-title">Account settings</h2>
+    <p class="hint"><a id="back-link" href="student.html" style="color: var(--brand)">&larr; Back to my rides</a></p>
+    <p class="status" id="status">Loading…</p>
+  </section>
+
+  <!-- Drivers only -->
+  <section class="panel hidden" id="vehicle-panel">
+    <h2 class="panel-title">My vehicle</h2>
+    <p class="status" id="vehicle"></p>
+    <p class="hint hidden" id="note" role="alert"></p>
+    <button class="secondary" id="vehicle-edit" type="button">Change my vehicle or plate number</button>
+    <div id="vehicle-form" class="hidden">
+      <label for="vehicle-type">Vehicle type</label>
+      <input id="vehicle-type" type="text" autocapitalize="characters" maxlength="30" placeholder="TRICYCLE, HABAL-HABAL, CAR…">
+
+      <label for="plate">Plate number</label>
+      <input id="plate" type="text" autocapitalize="characters" maxlength="12">
+
+      <button class="primary" id="vehicle-save" type="button">Save</button>
+      <button class="secondary" id="vehicle-cancel" type="button">Cancel</button>
+      <p class="hint">Students see this vehicle and plate number after you accept their ride. If you change them, your account goes back to pending until the owner checks your vehicle again.</p>
+    </div>
+  </section>
+
+  <div id="delete-area"></div>
+
+  <section class="panel">
+    <p class="hint"><a href="privacy.html" style="color: var(--brand)">Privacy notice</a></p>
+  </section>
+
+  <script type="module" src="js/account.js"></script>
+</body>
+</html>

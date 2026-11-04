@@ -1,4 +1,5 @@
-// "Delete my account" (W10b + W10c), shown at the bottom of the student and driver pages.
+// "Delete my account" (W10b + W10c). The panel lives on the account page (W31); the student and
+// driver pages only show the small notice under the top bar while a deletion is waiting.
 //
 // How it works:
 //  1. The person taps "Delete my account". This only STARTS a 24-hour countdown: his profile
@@ -61,20 +62,23 @@ function whenText(millis) {
   return new Date(millis).toLocaleString([], { weekday: "short", month: "short", day: "numeric", hour: "numeric", minute: "2-digit" });
 }
 
-// Adds the panel after the feedback panel (the last panel of the page), and a small notice
-// under the top bar while a deletion is waiting.
-export function mountDeleteAccount({ role, user, profile }) {
-  const link = document.getElementById("feedback-link");
-  const anchor = link && link.closest("section");
+// Two ways to use it (W31):
+//  - with `into` (the account page): puts the Delete my account panel inside that element.
+//  - without `into` (the student and driver pages): only a small notice under the top bar
+//    while a deletion is waiting, with a link to the account page.
+export function mountDeleteAccount({ role, user, profile, into }) {
+  const showPanel = !!into;
   const panel = make("section", "", "panel");
   panel.id = "delete-panel";
-  if (anchor && anchor.parentNode) anchor.parentNode.insertBefore(panel, anchor.nextSibling);
-  else document.body.appendChild(panel);
+  if (showPanel) into.appendChild(panel);
 
-  const banner = make("section", "", "panel hidden");
-  banner.id = "delete-banner";
-  const top = document.querySelector("header.topbar");
-  if (top && top.parentNode) top.parentNode.insertBefore(banner, top.nextSibling);
+  let banner = null;
+  if (!showPanel) {
+    banner = make("section", "", "panel hidden");
+    banner.id = "delete-banner";
+    const top = document.querySelector("header.topbar");
+    if (top && top.parentNode) top.parentNode.insertBefore(banner, top.nextSibling);
+  }
 
   let requestedAt = profile.deleteRequestedAt ? profile.deleteRequestedAt.toDate().getTime() : null;
   let timer = null;
@@ -234,26 +238,34 @@ export function mountDeleteAccount({ role, user, profile }) {
   }
 
   function drawBanner() {
+    if (!banner) return;
     banner.textContent = "";
     const pending = requestedAt !== null && profile.blocked !== true;
     banner.classList.toggle("hidden", !pending);
     if (!pending) return;
     const ready = requestedAt + WAIT_MS;
     const text = Date.now() < ready
-      ? "Your account will be deleted on " + whenText(ready) + ". You can undo this at the bottom of the page."
-      : "The 24 hours are over. You can finish deleting your account, or undo it, at the bottom of the page.";
+      ? "Your account will be deleted on " + whenText(ready) + ". You can undo this on your account page."
+      : "The 24 hours are over. You can finish deleting your account, or undo it, on your account page.";
     banner.appendChild(make("p", text, "ride-line"));
-    // Only a link: the one Undo button is under My account (W28).
-    const jump = make("a", "Go to My account");
-    jump.href = "#delete-panel";
+    // Only a link: the Undo button and the password step are on the account page.
+    const jump = make("a", "Go to Account settings");
+    jump.href = "account.html#delete-panel";
     banner.appendChild(jump);
   }
 
   function render() {
     clearTimeout(timer);
+    if (!showPanel) {
+      // Only the notice: draw it again when the 24 hours are over.
+      drawBanner();
+      if (requestedAt !== null && profile.blocked !== true && Date.now() < requestedAt + WAIT_MS) {
+        timer = setTimeout(render, Math.min(requestedAt + WAIT_MS - Date.now() + 1000, 2147483647));
+      }
+      return;
+    }
     panel.textContent = "";
-    panel.appendChild(make("h2", "My account", "panel-title"));
-    drawBanner();
+    panel.appendChild(make("h2", "Delete my account", "panel-title"));
 
     if (profile.blocked === true) {
       panel.appendChild(make("p", "A blocked account can’t be deleted here. Write to " + SUPPORT_EMAIL + " if you want it deleted.", "hint"));

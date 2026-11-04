@@ -37,3 +37,27 @@ export async function logOut() {
   await signOut(auth);
   location.replace("login.html");
 }
+
+// For a page that both students and drivers use (the account page, W31): waits for the login,
+// sends a visitor with no login or no profile to the log in page, and returns { user, profile }.
+export function requireMember() {
+  return new Promise((resolve, reject) => {
+    const stop = onAuthStateChanged(auth, async (user) => {
+      stop();
+      try {
+        if (!user) {
+          location.replace("login.html");
+          return;
+        }
+        const snap = await getDoc(doc(db, "users", user.uid));
+        if (!snap.exists() || (snap.data().role !== "student" && snap.data().role !== "driver")) {
+          location.replace("login.html");
+          return;
+        }
+        resolve({ user, profile: snap.data() });
+      } catch (error) {
+        reject(error);
+      }
+    });
+  });
+}
