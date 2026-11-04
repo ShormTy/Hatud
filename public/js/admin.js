@@ -8,6 +8,8 @@ import {
   getDoc,
   getDocs,
   collection,
+  query,
+  where,
   updateDoc,
   setDoc,
   deleteDoc,
@@ -136,15 +138,37 @@ const setApproval = (uid, status) => change(async () => {
   ? "Approve " + who(uid) + "? Only do this after you checked the papers and the vehicle in person."
   : "Set " + who(uid) + " back to pending? They will not see ride requests until you approve again.");
 
+// Deletes every ride a student made, with the private record inside it (his name and phone
+// number) and his lock (W25). Small saves of 5 rides keep each save under Firestore's limit of
+// 20 rule lookups. Returns how many rides were deleted.
+async function deleteStudentRides(uid) {
+  await deleteDoc(doc(db, "locks", uid));
+  const snap = await getDocs(query(collection(db, "rides"), where("studentId", "==", uid)));
+  const ids = snap.docs.map((d) => d.id);
+  for (let i = 0; i < ids.length; i += 5) {
+    const batch = writeBatch(db);
+    ids.slice(i, i + 5).forEach((id) => {
+      batch.delete(doc(db, "rides", id, "private", "student"));
+      batch.delete(doc(db, "rides", id));
+    });
+    await batch.commit();
+  }
+  return ids.length;
+}
+
 // Removes the profile (users) and, for a driver, the driver record.
 // The login in Firebase Authentication stays: only the console can delete it.
 async function removePerson(uid) {
   if (admins.has(uid)) { say("An admin cannot be removed here."); return; }
   let done = false;
+  let ridesGone = null;
   await change(async () => {
     // A small note is kept in removedUsers so the person stays on the Removed tab after a refresh.
     const u = users.get(uid) || {};
     const d = drivers.get(uid);
+    // A student's rides and their private name and number records go first (W25). If this fails,
+    // nothing else is removed and the owner can press Remove again.
+    if (u.role === "student") ridesGone = await deleteStudentRides(uid);
     const note = { name: u.name || "", role: u.role || "", contactNumber: u.contactNumber || "" };
     if (u.school) note.school = u.school;
     if (d) { note.vehicleType = d.vehicleType; note.plateNumber = d.plateNumber; }
@@ -163,8 +187,8 @@ async function removePerson(uid) {
     appeals.delete(uid);
     notes.delete(uid);
     done = true;
-  }, "Remove " + who(uid) + "?\n\nThis deletes the profile (and the driver record). The login stays in Firebase Authentication, so the email stays taken until you delete it there. To keep someone out for good, use Block instead.");
-  if (done) say("Removed. UID: " + uid + ". To free the email: Firebase console, Authentication, Users, three dots, Delete account.");
+  }, "Remove " + who(uid) + "?\n\nThis deletes the profile (and the driver record) and, for a student, all his rides with their private name and contact records. The login stays in Firebase Authentication, so the email stays taken until you delete it there. To keep someone out for good, use Block instead.");
+  if (done) say("Removed" + (ridesGone === null ? "" : " (and " + ridesGone + (ridesGone === 1 ? " ride" : " rides") + ")") + ". UID: " + uid + ". To free the email: Firebase console, Authentication, Users, three dots, Delete account.");
 }
 
 // Deletes the note too, once the login is gone from Firebase Authentication.

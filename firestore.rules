@@ -191,13 +191,16 @@ service cloud.firestore {
     // request at a time. Drivers will be able to read open requests in the
     // next stage.
     match /rides/{rideId} {
+      // The admin (the owner's page) can also read rides, only to delete a removed
+      // student's rides (W25). The admin check is last, so it costs nothing for others.
       // A student reads his own rides. An approved driver can read rides that
       // are still open ("requested"); his query must ask for status == "requested".
       // Expired-but-unclosed requests are hidden by the driver's page, not by the rules
       // (rules cannot compare a query against the phone's clock).
       allow read: if isSelf(resource.data.studentId)
         || isSelf(resource.data.driverId)
-        || (resource.data.status == 'requested' && isApprovedDriver());
+        || (resource.data.status == 'requested' && isApprovedDriver())
+        || isAdmin();
       allow create: if isActiveStudent()
         && isNewRide(request.resource.data)
         && existsAfter(/databases/$(database)/documents/locks/$(request.auth.uid))
@@ -307,10 +310,11 @@ service cloud.firestore {
       // over (deleteAfter has passed). Only the student deletes, so his name and
       // contact number in the private record go away together with the ride.
       // Also allowed at any time once his own profile is deleted (W10b: in the same save, or in the later small saves).
-      allow delete: if isSelf(resource.data.studentId)
+      allow delete: if (isSelf(resource.data.studentId)
         && resource.data.status in ['completed', 'cancelled', 'expired']
         && (resource.data.deleteAfter <= request.time
-            || !existsAfter(/databases/$(database)/documents/users/$(request.auth.uid)));
+            || !existsAfter(/databases/$(database)/documents/users/$(request.auth.uid))))
+        || isAdmin(); // W25: the owner removes a student's rides with his account
 
       // The student's name and contact number live in a small private record next
       // to the ride, so drivers cannot see them before accepting.
@@ -327,11 +331,12 @@ service cloud.firestore {
           && request.resource.data.name == get(/databases/$(database)/documents/users/$(request.auth.uid)).data.name
           && request.resource.data.contactNumber == get(/databases/$(database)/documents/users/$(request.auth.uid)).data.contactNumber;
         // Tidy-up: deleted by the student after the ride's 30 days are over.
-        allow delete: if docId == 'student'
+        allow delete: if (docId == 'student'
           && isSelf(get(/databases/$(database)/documents/rides/$(rideId)).data.studentId)
           && get(/databases/$(database)/documents/rides/$(rideId)).data.status in ['completed', 'cancelled', 'expired']
           && (get(/databases/$(database)/documents/rides/$(rideId)).data.deleteAfter <= request.time
-              || !existsAfter(/databases/$(database)/documents/users/$(request.auth.uid)));
+              || !existsAfter(/databases/$(database)/documents/users/$(request.auth.uid))))
+          || (docId == 'student' && isAdmin()); // W25
       }
     }
 
@@ -351,7 +356,7 @@ service cloud.firestore {
       // the ride; after the ride is completed; or, as a safety valve, when a ride has
       // been "on the way" for more than 6 hours (for example if the driver never
       // tapped Completed), so a student is never stuck.
-      allow delete: if isSelf(uid)
+      allow delete: if (isSelf(uid)
         && (!exists(/databases/$(database)/documents/rides/$(resource.data.rideId))
             || (get(/databases/$(database)/documents/rides/$(resource.data.rideId)).data.status in ['requested', 'accepted']
              && getAfter(/databases/$(database)/documents/rides/$(resource.data.rideId)).data.status in ['cancelled', 'expired'])
@@ -360,7 +365,8 @@ service cloud.firestore {
                 && getAfter(/databases/$(database)/documents/rides/$(resource.data.rideId)).data.status == 'cancelled')
             || get(/databases/$(database)/documents/rides/$(resource.data.rideId)).data.status == 'completed'
             || (get(/databases/$(database)/documents/rides/$(resource.data.rideId)).data.status == 'on_the_way'
-                && get(/databases/$(database)/documents/rides/$(resource.data.rideId)).data.startedAt <= request.time - duration.value(6, 'h')));
+                && get(/databases/$(database)/documents/rides/$(resource.data.rideId)).data.startedAt <= request.time - duration.value(6, 'h'))))
+        || isAdmin(); // W25: the owner removes a student with an open request
     }
 
     // A signed-in driver whom the owner has approved, blocked or not. Used for finishing
