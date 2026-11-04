@@ -7,6 +7,7 @@ import { showAppeal } from "./appeal.js";
 import { mountDeleteAccount } from "./delete-account.js";
 import { confirmBox } from "./dialog.js";
 import { SUPPORT_EMAIL } from "./support.js";
+import { alertUser } from "./alerts.js";
 import {
   doc,
   collection,
@@ -586,6 +587,8 @@ async function showCurrentState() {
           say(reopenNote || "The driver left the ride, so your request is open again for other drivers.");
           reopenNote = "";
         }
+        // Alert: a driver just accepted this request.
+        if (lastStatus === "requested" && latest.status === "accepted") alertUser("A driver accepted your ride");
         lastStatus = latest.status;
         showActive(rideId, latest);
       } else if (latest.status === "completed") {

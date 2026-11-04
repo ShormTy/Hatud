@@ -8,6 +8,7 @@ import { mountDeleteAccount } from "./delete-account.js";
 import { confirmBox } from "./dialog.js";
 import { SUPPORT_EMAIL } from "./support.js";
 import { keepScreenOn } from "./wakelock.js";
+import { alertUser } from "./alerts.js";
 import {
   doc,
   getDoc,
@@ -924,6 +925,8 @@ function startPositionForList() {
   );
 }
 
+let seenRequestIds = null; // ids of the open requests the page has already seen (for the alert)
+
 function startListening(blocked) {
   startPositionForList();
   const fail = () => {
@@ -937,6 +940,14 @@ function startListening(blocked) {
       query(collection(db, "rides"), where("status", "==", "requested")),
       (snapshot) => {
         rides = snapshot.docs.map((d) => ({ id: d.id, data: d.data() }));
+        // Alert: a request that was not in the list before (not for the first load, and not
+        // while he is on a ride).
+        if (seenRequestIds && !currentId) {
+          const fresh = rides.filter((r) => !seenRequestIds.has(r.id)
+            && r.data.expiresAt && r.data.expiresAt.toDate().getTime() > Date.now());
+          if (fresh.length > 0) alertUser(fresh.length === 1 ? "New ride request" : fresh.length + " new ride requests");
+        }
+        seenRequestIds = new Set(rides.map((r) => r.id));
         renderList();
       },
       fail
