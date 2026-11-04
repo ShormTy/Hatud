@@ -449,3 +449,110 @@ input:focus-visible, select:focus-visible, textarea:focus-visible {
   /* 7. The theme button spins when tapped (motion.js adds and removes the class "spin"). */
   .theme-btn.spin { animation: theme-spin 0.5s ease-in-out; }
 }
+
+/* W17f: more animation on the home page (index.html has class "home" on the body).
+   Everything that moves is inside the no-preference block. */
+.road { position: relative; height: 14px; max-width: 240px; margin: 2px auto 14px; }
+.road::before { content: ""; position: absolute; left: 0; right: 0; top: 6px; border-top: 2px dashed var(--line); }
+.road::after { content: ""; position: absolute; right: 0; top: 0; width: 14px; height: 14px; border-radius: 50%; background: #c2410c; opacity: 0.85; }
+.road span { position: absolute; left: 0; top: 0; width: 14px; height: 14px; border-radius: 50%; background: var(--brand); box-shadow: 0 0 0 4px rgba(13, 148, 136, 0.2); }
+
+@keyframes w17f-drive {
+  0% { left: 0; opacity: 0; }
+  8% { opacity: 1; }
+  70% { left: calc(100% - 14px); opacity: 1; }
+  80% { left: calc(100% - 14px); opacity: 0; }
+  100% { left: 0; opacity: 0; }
+}
+@keyframes w17f-slide { from { opacity: 0; transform: translateX(-14px); } to { opacity: 1; transform: none; } }
+@keyframes w17f-icon { from { opacity: 0; transform: rotate(-90deg) scale(0.3); } to { opacity: 1; transform: none; } }
+@keyframes w17f-fade { from { opacity: 0; } to { opacity: 1; } }
+@keyframes w17f-shimmer { 0% { background-position: 200% 0; } 60%, 100% { background-position: -100% 0; } }
+@keyframes w17f-breathe {
+  from { transform: translate(0, 0) scale(1); opacity: 0.8; }
+  to { transform: translate(24px, 14px) scale(1.15); opacity: 1; }
+}
+@keyframes w17f-cta {
+  0% { box-shadow: 0 6px 16px rgba(13, 148, 136, 0.28), 0 0 0 0 rgba(13, 148, 136, 0.45); }
+  70%, 100% { box-shadow: 0 6px 16px rgba(13, 148, 136, 0.28), 0 0 0 14px rgba(13, 148, 136, 0); }
+}
+
+@media (prefers-reduced-motion: no-preference) {
+
+  /* 1. The top of the page builds up: name, tagline, road, then the first card. */
+  body.home > main > h1 { animation: hatud-rise 0.6s cubic-bezier(0.2, 0.8, 0.2, 1) 0.15s backwards; }
+  body.home > main > .tagline { animation: hatud-rise 0.6s cubic-bezier(0.2, 0.8, 0.2, 1) 0.28s backwards; }
+  body.home > main > .road { animation: hatud-rise 0.6s cubic-bezier(0.2, 0.8, 0.2, 1) 0.4s backwards; }
+  body.home > main > .card:not(.section) { animation-delay: 0.5s; }
+  body.home > main > .foot { animation: w17f-fade 1s ease 0.9s backwards; }
+
+  /* 2. A small teal dot drives along the road from A to B, again and again. */
+  body.home .road span { animation: w17f-drive 5s ease-in-out 1.2s infinite; }
+
+  /* 3. A light sweep runs across the tagline every few seconds (only where the browser can
+        clip a background to text, so the words can never disappear). */
+  @supports ((-webkit-background-clip: text) or (background-clip: text)) {
+    body.home .tagline {
+      background: linear-gradient(100deg, var(--accent-text) 40%, var(--brand) 50%, var(--accent-text) 60%);
+      background-size: 250% 100%;
+      background-position: 200% 0;
+      -webkit-background-clip: text;
+      background-clip: text;
+      -webkit-text-fill-color: transparent;
+      animation: hatud-rise 0.6s cubic-bezier(0.2, 0.8, 0.2, 1) 0.28s backwards,
+                 w17f-shimmer 5s ease-in-out 1.6s infinite;
+    }
+  }
+
+  /* 4. Two soft glows behind the page drift slowly (teal at the top, warm at the bottom). */
+  body.home::before, body.home::after {
+    content: "";
+    position: fixed;
+    z-index: -1;
+    pointer-events: none;
+    border-radius: 50%;
+  }
+  body.home::before {
+    top: -140px; left: 50%; width: 440px; height: 340px; margin-left: -220px;
+    background: radial-gradient(closest-side, rgba(13, 148, 136, 0.22), rgba(13, 148, 136, 0));
+    animation: w17f-breathe 8s ease-in-out infinite alternate;
+  }
+  body.home::after {
+    bottom: -160px; right: -120px; width: 360px; height: 300px;
+    background: radial-gradient(closest-side, rgba(217, 119, 6, 0.14), rgba(217, 119, 6, 0));
+    animation: w17f-breathe 11s ease-in-out infinite alternate-reverse;
+  }
+
+  /* 5. The logo leans in when you point at it or tap it. */
+  body.home .logo-anim { transition: transform 0.3s cubic-bezier(0.34, 1.56, 0.64, 1); }
+  body.home .logo-anim:hover, body.home .logo-anim:active { transform: scale(1.08) rotate(-3deg); }
+
+  /* 6. The Log in (or Open Hatud) button sends out a soft ring now and then. */
+  body.home #guest-actions .primary:not(.ghost), body.home #member-actions .primary {
+    animation: w17f-cta 3s ease-out 1.8s infinite;
+  }
+  body.home #guest-actions .primary:not(.ghost):hover, body.home #member-actions .primary:hover { animation: none; }
+
+  /* 7. Inside each card, once it scrolls into view: heading icon spins in, the steps and the
+        safety points slide in one after another. */
+  .card.reveal-in h2::before { animation: w17f-icon 0.6s cubic-bezier(0.34, 1.56, 0.64, 1) 0.15s backwards; }
+  .card.reveal-in .steps li, .card.reveal-in .safe li { animation: w17f-slide 0.5s ease-out backwards; }
+  .card.reveal-in .steps li:nth-child(1), .card.reveal-in .safe li:nth-child(1) { animation-delay: 0.25s; }
+  .card.reveal-in .steps li:nth-child(2), .card.reveal-in .safe li:nth-child(2) { animation-delay: 0.37s; }
+  .card.reveal-in .steps li:nth-child(3), .card.reveal-in .safe li:nth-child(3) { animation-delay: 0.49s; }
+  .card.reveal-in .safe li:nth-child(4) { animation-delay: 0.61s; }
+  .card.reveal-in .safe li:nth-child(5) { animation-delay: 0.73s; }
+
+  /* 8. On a mouse, a card lifts a little when you point at it. */
+  @media (hover: hover) and (pointer: fine) {
+    html.motion-ok body.home main > .card.section {
+      transition: opacity 0.55s ease, transform 0.55s ease, box-shadow 0.25s ease;
+      transition-delay: var(--rise-delay, 0s);
+    }
+    html.motion-ok body.home main > .card.section.reveal-in:hover {
+      transform: translateY(-3px);
+      box-shadow: 0 12px 28px rgba(0, 0, 0, 0.16);
+      transition-delay: 0s;
+    }
+  }
+}
