@@ -138,3 +138,7 @@ input[type="datetime-local"] { min-height: 46px; }
 .dialog-buttons { display: flex; gap: 10px; }
 .dialog-buttons button { flex: 1; margin: 0; }
 .primary.danger { background: #b91c1c; color: #ffffff; }
+
+/* Collapsible past rides panel (student and driver pages) */
+details.panel > summary { cursor: pointer; }
+details.panel:not([open]) > summary { margin-bottom: 0; }

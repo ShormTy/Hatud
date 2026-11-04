@@ -731,6 +731,7 @@ function renderHistory() {
     .sort((a, b) => rideMillis(b.data) - rideMillis(a.data));
 
   byId("history").classList.toggle("hidden", past.length === 0);
+  byId("history-title").textContent = "My past rides (" + past.length + ")";
   const list = byId("history-list");
   list.textContent = "";
 

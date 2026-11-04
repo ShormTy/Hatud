@@ -659,6 +659,7 @@ function renderHistory(past) {
   const list = byId("history-list");
   list.textContent = "";
   byId("history-empty").classList.toggle("hidden", past.length > 0);
+  byId("history-title").textContent = "My past rides" + (past.length > 0 ? " (" + past.length + ")" : "");
   const words = { completed: "Completed", cancelled: "Cancelled", expired: "Expired (no driver)" };
 
   past.forEach((r) => {

@@ -284,6 +284,42 @@ function appealCard(uid, a) {
   return card;
 }
 
+// ---------- Deletions: people who asked to delete their account ----------
+// The same 24 hours as in firestore.rules and js/delete-account.js.
+const DELETE_WAIT_MS = 24 * 60 * 60 * 1000;
+
+function timeLeftText(ms) {
+  const hours = Math.ceil(ms / (60 * 60 * 1000));
+  return "about " + hours + (hours === 1 ? " hour" : " hours");
+}
+
+function deletionCard(uid, u) {
+  const dueAt = u.deleteRequestedAt.toMillis() + DELETE_WAIT_MS;
+  const left = dueAt - Date.now();
+  const card = el("div", null, "history-item");
+  card.append(el("p", (u.name || uid) + (left <= 0 ? " (DUE)" : " (waiting)"), "panel-title"));
+  card.append(line("Role:", u.role + (u.blocked ? " (BLOCKED)" : "")));
+  const d = drivers.get(uid);
+  if (d) card.append(line("Vehicle:", d.vehicleType + ", plate " + d.plateNumber));
+  if (u.school) card.append(line("School:", u.school));
+  card.append(line("Contact:", u.contactNumber));
+  card.append(line("Asked on:", when(u.deleteRequestedAt)));
+  card.append(line("The 24 hours end:", new Date(dueAt).toLocaleString()));
+  card.append(line("Time left:", left <= 0 ? "the 24 hours are over" : timeLeftText(left)));
+  card.append(line("ID:", uid));
+  if (u.blocked) {
+    card.append(el("p", "He is blocked, so he cannot finish deleting his account himself. Unblock him, or remove him.", "hint"));
+  } else if (left <= 0) {
+    card.append(el("p", "The 24 hours are over. He can finish at the bottom of his page. If he does not come back, press Remove now.", "hint"));
+  } else {
+    card.append(el("p", "He can still undo it until the 24 hours are over. Remove now unlocks after that.", "hint"));
+  }
+  const remove = button("Remove now", "secondary", () => removePerson(uid));
+  remove.disabled = left > 0 && !u.blocked;
+  card.append(remove);
+  return card;
+}
+
 function reportCard(r) {
   const isApp = r.targetType === "app";
   const card = el("div", null, "history-item");
@@ -308,10 +344,16 @@ function render() {
   const students = [...users].filter(([uid, u]) => u.role === "student" && !admins.has(uid));
   const blockedPeople = [...users].filter(([uid, u]) => u.blocked === true && !admins.has(uid));
   const newAppeals = [...appeals.values()].filter((a) => a.status !== "denied").length;
+  // People who asked to delete their account (the one who asked first is listed first).
+  const deletions = [...users]
+    .filter(([uid, u]) => u.deleteRequestedAt && u.deleteRequestedAt.toMillis && !admins.has(uid))
+    .sort(([, a], [, b]) => a.deleteRequestedAt.toMillis() - b.deleteRequestedAt.toMillis());
+  const deletionsDue = deletions.filter(([, u]) => u.deleteRequestedAt.toMillis() + DELETE_WAIT_MS <= Date.now()).length;
   const names = {
     drivers: "Drivers (" + drivers.size + (pending ? ", " + pending + " waiting" : "") + ")",
     students: "Students (" + students.length + ")",
     blocked: "Blocked (" + blockedPeople.length + ")",
+    deletions: "Deletions (" + deletions.length + (deletionsDue ? ", " + deletionsDue + " due" : "") + ")",
     appeals: "Appeals (" + newAppeals + " new)",
     admins: "Admins (" + admins.size + ")",
     removed: "Removed (" + removed.size + ")",
@@ -342,6 +384,8 @@ function render() {
       .forEach(([uid, u]) => cards.push(personCard(uid, u, true)));
   } else if (tab === "blocked") {
     blockedPeople.sort(byName).forEach(([uid, u]) => cards.push(blockedCard(uid, u)));
+  } else if (tab === "deletions") {
+    deletions.forEach(([uid, u]) => cards.push(deletionCard(uid, u)));
   } else if (tab === "appeals") {
     // New appeals first, then the newest.
     [...appeals].sort(([, a], [, b]) => (b.status !== "denied") - (a.status !== "denied")
