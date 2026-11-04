@@ -34,6 +34,7 @@ Status: the pilot build is finished (login, rides, fares, history, reports, admi
   - `js/session.js` checks who is signed in and their role; `js/auth-page.js` is the log in and sign up code.
   - `js/student.js`, `js/driver.js` and `js/admin.js` are the code of those pages; `js/report.js`, `js/feedback.js` and `js/caps.js` are small helpers.
   - `manifest.webmanifest`, `sw.js`, `js/pwa.js` and `icons/` make the site installable. The service worker caches nothing on purpose, so everyone always gets the newest version.
+  - `vendor/leaflet/` is a copy of the Leaflet 1.9.4 map software (BSD 2-Clause license), served from this site so no outside service delivers it.
 - `plan/` holds the project brief (`HATUD_PROJECT_BRIEF.md`).
 - `firestore.rules` and `firestore.indexes.json` are the database rules and indexes.
 - `firebase.json` and `.firebaserc` connect this folder to the Firebase project.
