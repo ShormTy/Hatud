@@ -14,6 +14,7 @@ import {
   writeBatch,
   serverTimestamp
 } from "https://www.gstatic.com/firebasejs/12.3.0/firebase-firestore.js";
+import { accountState, STATE_LABELS } from "./account-state.js";
 
 const byId = (id) => document.getElementById(id);
 const REASONS = {
@@ -37,7 +38,8 @@ let admins = new Set();
 let removed = new Map();
 let tallies = new Map(); // reportTally: uid -> { reporters: [ids of DIFFERENT people who reported him] }
 let appeals = new Map(); // appeals: uid -> { message, status, createdAt }
-let tab = "drivers";
+let tab = "todo";
+let filter = "all"; // the chip chosen on the Users tab
 
 // Everything people typed is shown with textContent, never as HTML.
 function el(tag, text, cls) {
@@ -338,26 +340,161 @@ function reportCard(r) {
   return card;
 }
 
+// ---------- W27h: four tabs (To do, Users, Reports, Closed accounts) ----------
+// Every person is in exactly one state (js/account-state.js: active, pending, blocked, deleting),
+// so the chips on the Users tab never overlap, and every person has the same card.
+const FILTERS = [
+  ["all", "All"],
+  ["students", "Students"],
+  ["drivers", "Drivers"],
+  ["pending", "Pending"],
+  ["blocked", "Blocked"],
+  ["deleting", "Deleting"],
+  ["admins", "Admins"]
+];
+
+const stateOf = (uid) => accountState(users.get(uid), drivers.get(uid));
+
+const reporterCount = (uid) => ((tallies.get(uid) || {}).reporters || []).length;
+
+// The time (in milliseconds) when the 24 hours of "Delete my account" end, or null.
+function deleteDueAt(u) {
+  return u && u.deleteRequestedAt && u.deleteRequestedAt.toMillis
+    ? u.deleteRequestedAt.toMillis() + DELETE_WAIT_MS
+    : null;
+}
+
+// Students and Drivers mean ACTIVE ones only; Pending, Blocked and Deleting are their own lists.
+function inFilter(uid, u, key) {
+  const state = stateOf(uid);
+  if (key === "students") return u.role === "student" && state === "active";
+  if (key === "drivers") return u.role === "driver" && state === "active";
+  if (key === "pending") return state === "pending";
+  if (key === "blocked") return state === "blocked";
+  if (key === "deleting") return state === "deleting";
+  return true;
+}
+
+// One card for every person (not an admin).
+function userCard(uid, u) {
+  const state = stateOf(uid);
+  const d = drivers.get(uid);
+  const a = appeals.get(uid);
+  const dueAt = deleteDueAt(u);
+  const left = dueAt === null ? 0 : dueAt - Date.now();
+  const card = el("div", null, "history-item");
+  card.append(el("p", u.name || uid, "panel-title"));
+  const chips = el("p", null, "chips-line");
+  chips.append(el("span", u.role, "chip"), el("span", STATE_LABELS[state], "chip " + state));
+  card.append(chips);
+  if (d) card.append(line("Vehicle:", d.vehicleType + ", plate " + d.plateNumber));
+  if (u.school) card.append(line("School:", u.school));
+  if (state === "blocked") {
+    card.append(line("Blocked:", blockedWhy(uid, u)));
+    card.append(el("p", dueAt !== null
+      ? "He also asked to delete his account. A blocked person cannot finish that himself."
+      : "A blocked person cannot delete his own account.", "hint"));
+  }
+  if (!u.blocked && reporterCount(uid) >= 3) {
+    card.append(el("p", "Three or more different people reported this person, but the automatic block did not finish. Press Block.", "hint"));
+  }
+  if (state === "deleting" && dueAt !== null) {
+    card.append(line("Asked on:", when(u.deleteRequestedAt)));
+    card.append(line("The 24 hours end:", new Date(dueAt).toLocaleString()));
+    card.append(line("Time left:", left <= 0 ? "the 24 hours are over" : timeLeftText(left)));
+    card.append(el("p", left <= 0
+      ? "The 24 hours are over. He can finish at the bottom of his page. If he does not come back, press Remove now."
+      : "He can still undo it until the 24 hours are over. Remove now unlocks after that.", "hint"));
+  }
+  if (a) {
+    card.append(line("Appeal:", (a.status === "denied" ? "denied" : "NEW") + ", sent " + when(a.createdAt)));
+    card.append(line("Message:", a.message));
+  }
+
+  const details = document.createElement("details");
+  details.append(el("summary", "Details"));
+  details.append(line("Contact:", u.contactNumber));
+  details.append(line("Signed up:", when(u.createdAt)));
+  details.append(line("ID:", uid));
+  details.append(line("Reports about this person:", String(reports.filter((r) => r.reportedId === uid).length)));
+  if (tallies.has(uid)) {
+    const n = reporterCount(uid);
+    details.append(line("Reported by:", n + " different " + (n === 1 ? "person" : "people")));
+  }
+  card.append(details);
+
+  // The main buttons depend on the state; the rest are under More.
+  const buttons = el("div", null, "card-buttons");
+  const more = [];
+  const block = () => button("Block", "secondary", () => setBlocked(uid, true));
+  const remove = (text) => button(text || "Remove", "secondary", () => removePerson(uid));
+  if (state === "pending") {
+    buttons.append(button("Approve", "primary", () => setApproval(uid, "approved")), block());
+    more.push(remove());
+  } else if (state === "blocked") {
+    buttons.append(button(a ? "Unblock (accept appeal)" : "Unblock", "primary", () => setBlocked(uid, false)));
+    if (a && a.status !== "denied") buttons.append(button("Deny appeal", "secondary", () => denyAppeal(uid)));
+    more.push(remove());
+  } else if (state === "deleting") {
+    const now = remove("Remove now");
+    now.disabled = left > 0;
+    buttons.append(now);
+    more.push(block());
+  } else {
+    buttons.append(block());
+    if (d) more.push(button("Set to pending", "secondary", () => setApproval(uid, "pending")));
+    more.push(remove());
+  }
+  if (a) more.unshift(button("Delete appeal", "secondary", () => deleteAppeal(uid)));
+  card.append(buttons);
+  if (more.length) {
+    const menu = document.createElement("details");
+    menu.className = "more";
+    menu.append(el("summary", "More"));
+    more.forEach((b) => menu.append(b));
+    card.append(menu);
+  }
+  return card;
+}
+
+// Admins are made and removed by hand in the Firebase console, so there are no buttons.
+function adminCard(uid) {
+  const u = users.get(uid) || { name: uid, role: "no profile" };
+  const card = el("div", null, "history-item");
+  card.append(el("p", u.name || uid, "panel-title"));
+  const chips = el("p", null, "chips-line");
+  chips.append(el("span", u.role, "chip"), el("span", "Admin", "chip admin"));
+  card.append(chips);
+  if (u.contactNumber) card.append(line("Contact:", u.contactNumber));
+  card.append(line("ID:", uid));
+  card.append(el("p", "Admins are made and removed by hand in the Firebase console.", "hint"));
+  return card;
+}
+
+// Everything that waits for the owner.
+function todoParts() {
+  const people = [...users].filter(([uid]) => !admins.has(uid));
+  const created = (u) => (u.createdAt && u.createdAt.toMillis ? u.createdAt.toMillis() : 0);
+  return {
+    pending: people.filter(([uid]) => stateOf(uid) === "pending").sort(([, a], [, b]) => created(a) - created(b)),
+    newAppeals: [...appeals].filter(([, a]) => a.status !== "denied"),
+    newReports: reports.filter((r) => r.status === "new"),
+    due: people.filter(([uid, u]) => stateOf(uid) === "deleting" && deleteDueAt(u) !== null && deleteDueAt(u) <= Date.now()),
+    needBlock: people.filter(([uid, u]) => !u.blocked && reporterCount(uid) >= 3)
+  };
+}
+
 function render() {
-  const pending = [...drivers.values()].filter((d) => d.approvalStatus !== "approved").length;
+  if (!["todo", "users", "reports", "closed"].includes(tab)) tab = "todo";
+  const people = [...users].filter(([uid]) => !admins.has(uid));
+  const t = todoParts();
+  const todoCount = t.pending.length + t.newAppeals.length + t.newReports.length + t.due.length + t.needBlock.length;
   const fresh = reports.filter((r) => r.status === "new").length;
-  const students = [...users].filter(([uid, u]) => u.role === "student" && !admins.has(uid));
-  const blockedPeople = [...users].filter(([uid, u]) => u.blocked === true && !admins.has(uid));
-  const newAppeals = [...appeals.values()].filter((a) => a.status !== "denied").length;
-  // People who asked to delete their account (the one who asked first is listed first).
-  const deletions = [...users]
-    .filter(([uid, u]) => u.deleteRequestedAt && u.deleteRequestedAt.toMillis && !admins.has(uid))
-    .sort(([, a], [, b]) => a.deleteRequestedAt.toMillis() - b.deleteRequestedAt.toMillis());
-  const deletionsDue = deletions.filter(([, u]) => u.deleteRequestedAt.toMillis() + DELETE_WAIT_MS <= Date.now()).length;
   const names = {
-    drivers: "Drivers (" + drivers.size + (pending ? ", " + pending + " waiting" : "") + ")",
-    students: "Students (" + students.length + ")",
-    blocked: "Blocked (" + blockedPeople.length + ")",
-    deletions: "Deletions (" + deletions.length + (deletionsDue ? ", " + deletionsDue + " due" : "") + ")",
-    appeals: "Appeals (" + newAppeals + " new)",
-    admins: "Admins (" + admins.size + ")",
-    removed: "Removed (" + removed.size + ")",
-    reports: "Reports (" + fresh + " new)"
+    todo: "To do (" + todoCount + ")",
+    users: "Users (" + people.length + ")",
+    reports: "Reports (" + fresh + " new)",
+    closed: "Closed accounts (" + removed.size + ")"
   };
   const tabs = byId("tabs");
   tabs.replaceChildren();
@@ -366,47 +503,66 @@ function render() {
     b.setAttribute("aria-selected", String(tab === key));
     tabs.append(b);
   }
-  byId("search").classList.toggle("hidden", tab !== "drivers" && tab !== "students");
+  byId("search").classList.toggle("hidden", tab !== "users" || filter === "admins");
 
-  const q = byId("search").value.trim().toLowerCase();
-  const match = (text) => !q || text.toLowerCase().includes(q);
-  const byName = ([, a], [, b]) => (a.name || "").localeCompare(b.name || "");
   const cards = [];
-  if (tab === "drivers") {
-    // Waiting drivers first.
-    [...drivers]
-      .filter(([uid, d]) => match(((users.get(uid) || {}).name || "") + " " + d.contactNumber + " " + d.plateNumber + " " + uid))
-      .sort(([, a], [, b]) => (a.approvalStatus === "approved") - (b.approvalStatus === "approved"))
-      .forEach(([uid, d]) => cards.push(driverCard(uid, d)));
-  } else if (tab === "students") {
-    students.filter(([uid, u]) => match(u.name + " " + u.contactNumber + " " + uid))
-      .sort(byName)
-      .forEach(([uid, u]) => cards.push(personCard(uid, u, true)));
-  } else if (tab === "blocked") {
-    blockedPeople.sort(byName).forEach(([uid, u]) => cards.push(blockedCard(uid, u)));
-  } else if (tab === "deletions") {
-    deletions.forEach(([uid, u]) => cards.push(deletionCard(uid, u)));
-  } else if (tab === "appeals") {
-    // New appeals first, then the newest.
-    [...appeals].sort(([, a], [, b]) => (b.status !== "denied") - (a.status !== "denied")
-      || (b.createdAt?.toMillis?.() || 0) - (a.createdAt?.toMillis?.() || 0))
-      .forEach(([uid, a]) => cards.push(appealCard(uid, a)));
-  } else if (tab === "removed") {
-    [...removed].sort(([, a], [, b]) => (b.removedAt?.toMillis?.() || Date.now()) - (a.removedAt?.toMillis?.() || Date.now()))
-      .forEach(([uid, n]) => cards.push(removedCard(uid, n)));
-  } else if (tab === "admins") {
-    // Admins are made and removed by hand in the Firebase console, so there are no buttons here.
-    [...admins].map((uid) => [uid, users.get(uid) || { name: uid, role: "no profile" }])
-      .sort(byName)
-      .forEach(([uid, u]) => cards.push(personCard(uid, u, false)));
-  } else {
+  let empty = "Nothing here.";
+  if (tab === "todo") {
+    empty = "Nothing is waiting for you.";
+    const group = (title, items, make) => {
+      if (!items.length) return;
+      cards.push(el("p", title + " (" + items.length + ")", "todo-heading"));
+      items.forEach((x) => cards.push(make(x)));
+    };
+    group("Drivers waiting for approval", t.pending, ([uid, u]) => userCard(uid, u));
+    group("New appeals", t.newAppeals, ([uid, a]) => {
+      const u = users.get(uid);
+      return u && !admins.has(uid) ? userCard(uid, u) : appealCard(uid, a);
+    });
+    group("New reports", t.newReports, (r) => reportCard(r));
+    group("Deletions that are due", t.due, ([uid, u]) => userCard(uid, u));
+    group("Reported by three or more people, not blocked yet", t.needBlock, ([uid, u]) => userCard(uid, u));
+  } else if (tab === "users") {
+    empty = "Nobody here.";
+    const filterBar = el("div", null, "filters");
+    for (const [key, label] of FILTERS) {
+      const n = key === "admins" ? admins.size : people.filter(([uid, u]) => inFilter(uid, u, key)).length;
+      const b = button(label + " (" + n + ")", null, () => { filter = key; render(); });
+      b.setAttribute("aria-selected", String(filter === key));
+      filterBar.append(b);
+    }
+    cards.push(filterBar);
+    const rows = [];
+    if (filter === "admins") {
+      [...admins].sort((x, y) => ((users.get(x) || {}).name || x).localeCompare((users.get(y) || {}).name || y))
+        .forEach((uid) => rows.push(adminCard(uid)));
+    } else {
+      const q = byId("search").value.trim().toLowerCase();
+      const match = (uid, u) => !q || (
+        (u.name || "") + " " + (u.contactNumber || "") + " " + ((drivers.get(uid) || {}).plateNumber || "") + " " + uid
+      ).toLowerCase().includes(q);
+      const created = (u) => (u.createdAt && u.createdAt.toMillis ? u.createdAt.toMillis() : 0);
+      people.filter(([uid, u]) => inFilter(uid, u, filter) && match(uid, u))
+        .sort(([, a], [, b]) => filter === "pending"
+          ? created(a) - created(b)
+          : (a.name || "").localeCompare(b.name || ""))
+        .forEach(([uid, u]) => rows.push(userCard(uid, u)));
+    }
+    cards.push(...(rows.length ? rows : [el("p", empty, "hint")]));
+    byId("list").replaceChildren(...cards);
+    return;
+  } else if (tab === "reports") {
+    empty = "No reports.";
     // New reports first, then the newest.
     [...reports].sort((a, b) => (b.status === "new") - (a.status === "new")
       || (b.createdAt?.toMillis?.() || 0) - (a.createdAt?.toMillis?.() || 0))
       .forEach((r) => cards.push(reportCard(r)));
+  } else {
+    empty = "No closed accounts.";
+    [...removed].sort(([, a], [, b]) => (b.removedAt?.toMillis?.() || Date.now()) - (a.removedAt?.toMillis?.() || Date.now()))
+      .forEach(([uid, n]) => cards.push(removedCard(uid, n)));
   }
-  const list = byId("list");
-  list.replaceChildren(...(cards.length ? cards : [el("p", "Nothing here.", "hint")]));
+  byId("list").replaceChildren(...(cards.length ? cards : [el("p", empty, "hint")]));
 }
 
 async function load() {

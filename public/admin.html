@@ -11,6 +11,22 @@
     .panel { max-width: 760px; }
     .tabs { margin: 12px 0; flex-wrap: wrap; }
     .history-item button { width: auto; margin-right: 8px; }
+    /* W27h: filter chips, state chips, the To do headings and the More menu */
+    .filters { display: flex; flex-wrap: wrap; gap: 6px; margin: 8px 0 12px; }
+    .filters button { width: auto; padding: 4px 10px; border: 1px solid var(--line); border-radius: 999px; background: transparent; color: var(--muted); font-size: 13px; cursor: pointer; }
+    .filters button[aria-selected="true"] { background: var(--brand); border-color: var(--brand); color: var(--brand-text); font-weight: 600; }
+    .chips-line { margin: 0 0 6px; }
+    .chip { display: inline-block; padding: 1px 8px; margin: 0 6px 0 0; border: 1px solid var(--line); border-radius: 999px; font-size: 12px; color: var(--muted); }
+    .chip.pending { border-color: #b7791f; color: #b7791f; }
+    .chip.blocked { border-color: var(--error-text); color: var(--error-text); }
+    .chip.admin { border-color: var(--brand); color: var(--brand); }
+    @media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) .chip.pending { border-color: #e0a030; color: #e0a030; } }
+    :root[data-theme="dark"] .chip.pending { border-color: #e0a030; color: #e0a030; }
+    .todo-heading { margin: 18px 0 2px; font-size: 14px; font-weight: 600; color: var(--muted); }
+    .history-item details { margin-top: 8px; }
+    .history-item summary { cursor: pointer; font-size: 14px; color: var(--muted); }
+    .history-item .card-buttons { margin-top: 10px; }
+    .history-item .card-buttons button { margin-top: 0; }
   </style>
   <meta name="theme-color" content="#11171d">
   <meta name="color-scheme" content="light dark">
