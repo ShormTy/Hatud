@@ -340,22 +340,27 @@ service cloud.firestore {
         && request.resource.data.completedAt == request.time;
 
       // Tidy-up: the student can delete his own finished ride once its 30 days are
-      // over (deleteAfter has passed). Only the student deletes, so his name and
-      // contact number in the private record go away together with the ride.
+      // over (deleteAfter has passed). The driver of a finished ride can too (item 20.8), but
+      // only in the same save that deletes the private record, so the student's name and
+      // contact number never stay behind without their ride.
       // Also allowed at any time once his own profile is deleted (W10b: in the same save, or in the later small saves).
       allow delete: if (isSelf(resource.data.studentId)
         && resource.data.status in ['completed', 'cancelled', 'expired']
         && (resource.data.deleteAfter <= request.time
             || !existsAfter(/databases/$(database)/documents/users/$(request.auth.uid))))
+        || (isSelf(resource.data.driverId)
+            && resource.data.status in ['completed', 'cancelled']
+            && resource.data.deleteAfter <= request.time
+            && !existsAfter(/databases/$(database)/documents/rides/$(rideId)/private/student))
         || isAdmin(); // W25: the owner removes a student's rides with his account
 
       // The student's name and contact number live in a small private record next
       // to the ride, so drivers cannot see them before accepting.
       match /private/{docId} {
+        // W20: the driver reads it only after the fare is agreed (see driverMaySeeStudent).
         allow read: if docId == 'student'
           && (isSelf(get(/databases/$(database)/documents/rides/$(rideId)).data.studentId)
-              || (get(/databases/$(database)/documents/rides/$(rideId)).data.driverId == request.auth.uid
-                  && get(/databases/$(database)/documents/rides/$(rideId)).data.status in ['accepted', 'on_the_way']));
+              || driverMaySeeStudent(get(/databases/$(database)/documents/rides/$(rideId)).data));
         allow create: if docId == 'student'
           && isSelf(getAfter(/databases/$(database)/documents/rides/$(rideId)).data.studentId)
           && !exists(/databases/$(database)/documents/rides/$(rideId))
@@ -363,12 +368,14 @@ service cloud.firestore {
           && request.resource.data.keys().hasAll(['name', 'contactNumber'])
           && request.resource.data.name == get(/databases/$(database)/documents/users/$(request.auth.uid)).data.name
           && request.resource.data.contactNumber == get(/databases/$(database)/documents/users/$(request.auth.uid)).data.contactNumber;
-        // Tidy-up: deleted by the student after the ride's 30 days are over.
+        // Tidy-up: deleted by the student, or by the driver of the ride, after the ride's 30 days
+        // are over (item 20.8), or by the owner (W25).
         allow delete: if (docId == 'student'
           && isSelf(get(/databases/$(database)/documents/rides/$(rideId)).data.studentId)
           && get(/databases/$(database)/documents/rides/$(rideId)).data.status in ['completed', 'cancelled', 'expired']
           && (get(/databases/$(database)/documents/rides/$(rideId)).data.deleteAfter <= request.time
               || !existsAfter(/databases/$(database)/documents/users/$(request.auth.uid))))
+          || (docId == 'student' && driverMayTidy(rideId))
           || (docId == 'student' && isAdmin()); // W25
       }
     }
@@ -416,6 +423,25 @@ service cloud.firestore {
     function isApprovedDriver() {
       return isApprovedDriverAny()
         && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.blocked == false;
+    }
+
+    // W20: the accepting driver can read the student's name and contact number only after the
+    // student agreed to the fare (fareAgreed), or after the driver accepted the student's
+    // counter-offer (the fare then counts as agreed by both). Before that, only the student
+    // reads his own record, so a driver cannot collect numbers by accepting and releasing rides.
+    function driverMaySeeStudent(ride) {
+      return ride.driverId == request.auth.uid
+        && ride.status in ['accepted', 'on_the_way']
+        && (ride.get('fareAgreed', false) == true || ride.get('counterAnswer', null) == 'accepted');
+    }
+
+    // Item 20.8: the driver of a finished ride can tidy it up once its 30 days are over
+    // (deleteAfter has passed). One lookup for the ride.
+    function driverMayTidy(rideId) {
+      let ride = get(/databases/$(database)/documents/rides/$(rideId)).data;
+      return isSelf(ride.driverId)
+        && ride.status in ['completed', 'cancelled']
+        && ride.deleteAfter <= request.time;
     }
 
     // A ride that goes back to the open list: the driver and everything he added

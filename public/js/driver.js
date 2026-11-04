@@ -17,6 +17,7 @@ import {
   onSnapshot,
   runTransaction,
   updateDoc,
+  writeBatch,
   serverTimestamp
 } from "https://www.gstatic.com/firebasejs/12.3.0/firebase-firestore.js";
 
@@ -44,6 +45,7 @@ let roadAt = 0;          // when they were last fetched (or when to try again af
 let roadKey = "";        // which requests the road distances cover
 let roadBusy = false;
 let currentId = null;    // the ride shown in "Your current ride"
+let studentLoadedFor = null; // the ride whose student details were asked for (W20)
 const typedFares = {};   // what the driver typed per request, kept while the list redraws
 
 byId("signout").addEventListener("click", () => logOut());
@@ -703,9 +705,36 @@ function renderCounter(ride) {
 // ---------- Past rides (about 30 days) ----------
 // The page already listens to every ride this driver accepted, so the list costs
 // no extra reads. Rides older than 30 days are hidden here and are removed from the
-// database when the student's app tidies up.
+// database when this page opens (tidyOldRides below), when the student's app tidies up or
+// when the owner's page does.
 
 const FINISHED = ["completed", "cancelled"];
+
+// Item 20.8: when the page opens, this driver's finished rides whose 30 days are over are
+// deleted, each together with the student's private name and contact record (the rules allow
+// the driver to delete a ride only in the same save as that record). Once per page load, in
+// small saves of 5 rides (Firestore allows only 20 rule lookups per save). If it is refused (for
+// example a wrong phone clock), the rides stay hidden and it is tried again next time.
+let tidiedOld = false;
+async function tidyOldRides() {
+  if (tidiedOld) return;
+  tidiedOld = true;
+  const now = Date.now();
+  const old = myRides.filter((r) => FINISHED.includes(r.data.status)
+    && r.data.deleteAfter && r.data.deleteAfter.toDate().getTime() <= now);
+  try {
+    for (let i = 0; i < old.length; i += 5) {
+      const batch = writeBatch(db);
+      old.slice(i, i + 5).forEach((r) => {
+        batch.delete(doc(db, "rides", r.id, "private", "student"));
+        batch.delete(doc(db, "rides", r.id));
+      });
+      await batch.commit();
+    }
+  } catch (error) {
+    console.warn("Tidy-up skipped:", error.code || error);
+  }
+}
 
 function rideMillis(data) {
   const t = data.completedAt || data.createdAt;
@@ -757,6 +786,7 @@ function renderHistory() {
 
 async function renderCurrent() {
   renderHistory();
+  tidyOldRides();
   const active = myRides.find(isActiveRide);
 
   // A ride this driver was on has ended.
@@ -779,6 +809,7 @@ async function renderCurrent() {
   if (!active) {
     const hadRide = currentId !== null;
     currentId = null;
+    studentLoadedFor = null;
     stopTracking();
     keepScreenOn(false);
     if (hadRide) {
@@ -801,7 +832,7 @@ async function renderCurrent() {
     ? "You are on the way. Tap Completed when the ride is done."
     : agreed
       ? "The student agreed to the fare. You can leave for the pickup."
-      : "Accepted. Waiting for the student to agree to the fare. You can’t leave until he agrees.";
+      : "Accepted. Waiting for the student to agree to the fare. You can’t leave until he agrees. His name and phone number appear when he agrees.";
   byId("advance").textContent = underway ? "Completed" : "I’m on the way";
   byId("advance").onclick = () => advance(active.id, underway ? "completed" : "on_the_way");
   byId("advance").disabled = !underway && !agreed;
@@ -819,6 +850,19 @@ async function renderCurrent() {
   byId("current-fare").textContent = "₱" + active.data.fare;
   renderCounter(active);
 
+  // W20: the student's name and phone number appear only after the student agreed to the fare
+  // (or the driver accepted his counter-offer). The rules refuse the read before that.
+  if (agreed) {
+    if (studentLoadedFor !== active.id) {
+      studentLoadedFor = active.id;
+      loadStudentDetails(active.id);
+    }
+  } else if (studentLoadedFor !== active.id) {
+    byId("current-student").textContent = "Shown when the student agrees to the fare";
+    byId("current-contact").textContent = "";
+    byId("current-contact").removeAttribute("href");
+  }
+
   if (currentId === active.id) return; // the details below are already shown
   currentId = active.id;
   renderList(); // the numbered request pins go away while he is on a ride
@@ -827,15 +871,19 @@ async function renderCurrent() {
   byId("current-fare").textContent = "₱" + data.fare;
   byId("current-from").textContent = placeText(data.pickup, "Pin A on the map");
   byId("current-to").textContent = placeText(data.dropoff, "Pin B on the map");
+  showOnMap(data);
+  startTracking(data);
+}
+
+// Reads the student's private record (his name and phone number). Only called once the
+// student has agreed to the fare (W20).
+async function loadStudentDetails(id) {
   byId("current-student").textContent = "Loading…";
   byId("current-contact").textContent = "";
   byId("current-contact").removeAttribute("href");
-  showOnMap(data);
-  startTracking(data);
-
   try {
-    const snap = await getDoc(doc(db, "rides", active.id, "private", "student"));
-    if (currentId !== active.id) return;
+    const snap = await getDoc(doc(db, "rides", id, "private", "student"));
+    if (currentId !== id) return;
     if (snap.exists()) {
       const student = snap.data();
       byId("current-student").textContent = student.name;
@@ -846,6 +894,8 @@ async function renderCurrent() {
       byId("current-student").textContent = "Details not available for this older request";
     }
   } catch (error) {
+    if (currentId !== id) return;
+    studentLoadedFor = null; // try again on the next update
     byId("current-student").textContent = "Couldn’t load the student’s details. Please refresh.";
   }
 }

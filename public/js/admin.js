@@ -15,6 +15,8 @@ import {
   deleteDoc,
   deleteField,
   writeBatch,
+  limit,
+  Timestamp,
   serverTimestamp
 } from "https://www.gstatic.com/firebasejs/12.3.0/firebase-firestore.js";
 import { accountState, STATE_LABELS } from "./account-state.js";
@@ -676,6 +678,30 @@ function render() {
   byId("list").replaceChildren(...(cards.length ? cards : [el("p", empty, "hint")]));
 }
 
+// Automatic cleanup (item 20.8): every time the owner opens this page, rides whose 30 days are
+// over (deleteAfter has passed) are deleted, each with the private name and contact record
+// inside it, up to 50 at a time (no button). This also covers people who never open the app
+// again. Locks are left alone on purpose: a lock whose ride is gone is freed by the student's
+// own page (W5), and a student with a newer open request must keep his lock.
+async function tidyOldRides() {
+  try {
+    const snap = await getDocs(query(collection(db, "rides"), where("deleteAfter", "<=", Timestamp.now()), limit(50)));
+    const ids = snap.docs.map((d) => d.id);
+    // Small saves of 5 rides keep each save under Firestore's limit of 20 rule lookups.
+    for (let i = 0; i < ids.length; i += 5) {
+      const batch = writeBatch(db);
+      ids.slice(i, i + 5).forEach((id) => {
+        batch.delete(doc(db, "rides", id, "private", "student"));
+        batch.delete(doc(db, "rides", id));
+      });
+      await batch.commit();
+    }
+    if (ids.length > 0) say("Tidied up " + ids.length + " old ride" + (ids.length === 1 ? "" : "s") + " (older than 30 days)" + (ids.length === 50 ? "; more will go the next time you open this page." : "."));
+  } catch (error) {
+    console.warn("Tidy-up skipped:", error.code || error);
+  }
+}
+
 async function load() {
   say("Loading…");
   try {
@@ -710,5 +736,5 @@ const stop = onAuthStateChanged(auth, async (user) => {
     return;
   }
   byId("hello").textContent = user.email;
-  load();
+  load().then(tidyOldRides);
 });

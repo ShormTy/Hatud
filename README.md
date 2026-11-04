@@ -56,9 +56,9 @@ A deploy is manual. Pushing to GitHub does not deploy.
 ## Privacy
 
 - Saved: name, contact number, school (students), vehicle type and plate (drivers), and ride records.
-- A student's name and number are shown to a driver only after the driver accepts. The driver's details are shown to the student after acceptance.
+- A student's name and number are shown to a driver only after the driver accepts AND the student agrees to the fare. The driver's details are shown to the student after acceptance.
 - Driver location is never saved. The app does not track the student's location; his location is only the pins he chooses.
-- Ride records are deleted when the student next opens the app, 30 days after the ride. Reports hold only ids, a reason and an optional short note.
+- Ride records are deleted 30 days after the ride, when the student, the driver or the owner (admin page) next opens the app. Reports hold only ids, a reason and an optional short note.
 - The consent wording on the sign-up page is a draft for the owner to review under the Data Privacy Act of 2012 (RA 10173).
 
 ## Known limits

@@ -212,7 +212,7 @@ async function sendRequest() {
       createdAt: serverTimestamp(),
       deleteAfter: Timestamp.fromDate(new Date(now + 30 * DAY_MS))
     });
-    // Name and contact number, kept private: a driver can read them only after accepting.
+    // Name and contact number, kept private: the driver can read them only after the student agreed to the fare (W20).
     batch.set(doc(db, "rides", rideRef.id, "private", "student"), {
       name: me.profile.name,
       contactNumber: me.profile.contactNumber
@@ -306,7 +306,7 @@ function showCounter(rideId, ride, accepted) {
   } else if (answer === "accepted") {
     text.textContent = "The driver accepted your offer. The fare is now ₱" + ride.fare + " and you are all set. Waiting for the driver to leave for your pickup.";
   } else if (!sent) {
-    text.textContent = "The driver’s fare is ₱" + ride.fare + ". Agree to it, send one lower offer, or decline to look for another driver. The driver can’t leave until you agree.";
+    text.textContent = "The driver’s fare is ₱" + ride.fare + ". Agree to it, send one lower offer, or decline to look for another driver. The driver can’t leave until you agree, and he sees your name and phone number only after you agree.";
   } else if (!answer) {
     text.textContent = "You offered ₱" + ride.counterOffer + ". Waiting for the driver to answer. You can also decline to look for another driver.";
   } else {
@@ -363,7 +363,7 @@ async function agreeFare(rideId, fare) {
   say("");
   const ok = await confirmBox({
     title: "Agree to ₱" + fare + "?",
-    message: "After you agree, the driver can leave for your pickup. You can still cancel until he taps I’m on the way.",
+    message: "After you agree, the driver sees your name and phone number and can leave for your pickup. You can still cancel until he taps I’m on the way.",
     okText: "Yes, agree",
     cancelText: "Not yet"
   });
@@ -684,12 +684,13 @@ function renderHistory(past) {
   });
 }
 
-// Deletes old finished rides (and their private records) in small batches.
+// Deletes old finished rides (and their private records) in small saves.
 async function tidyUp(old) {
   try {
-    for (let i = 0; i < old.length; i += 200) {
+    // Small saves of 5 rides: Firestore allows only 20 rule lookups per save.
+    for (let i = 0; i < old.length; i += 5) {
       const batch = writeBatch(db);
-      old.slice(i, i + 200).forEach((r) => {
+      old.slice(i, i + 5).forEach((r) => {
         batch.delete(doc(db, "rides", r.id, "private", "student"));
         batch.delete(doc(db, "rides", r.id));
       });
