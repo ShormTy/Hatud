@@ -436,8 +436,14 @@ function userCard(uid, u) {
     if (a && a.status !== "denied") buttons.append(button("Deny appeal", "secondary", () => denyAppeal(uid)));
     more.push(remove());
   } else if (state === "deleting") {
-    const now = remove("Remove now");
-    now.disabled = left > 0;
+    // Not disabled (a disabled button looks the same and does nothing): it explains itself (W30).
+    const now = button("Remove now", "secondary", () => {
+      if (dueAt !== null && dueAt - Date.now() > 0) {
+        window.alert("Not yet. " + (u.name || "This person") + " can still undo the deletion until " + new Date(dueAt).toLocaleString() + ". Remove now unlocks after that.\n\nTo remove him sooner, open More and press Block first, then Remove.");
+        return;
+      }
+      removePerson(uid);
+    });
     buttons.append(now);
     more.push(block());
   } else {

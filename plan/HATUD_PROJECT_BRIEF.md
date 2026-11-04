@@ -1,4 +1,4 @@
-# Hatud: Project Brief (draft v0.126)
+# Hatud: Project Brief (draft v0.127)
 
 > **For any AI reading this:** This file is the full context for the Hatud project. Read it before replying. Treat the "Decisions" section as settled unless the user reopens it. Do not re-propose rejected ideas without new reasoning. Last updated: November 4, 2026.
 
@@ -287,6 +287,8 @@ When the user confirms an item works, the AI moves its line here from Section 10
 - **W28 (the user's request v0.126; written as apply-stage8w28.sh, waiting for the user's test; page only)** "Delete my account" had TWO Undo and keep my account buttons (one in the notice under the top bar, one under My account at the bottom). Now only the one under My account stays; the notice under the top bar is text plus a Go to My account link (public/js/delete-account.js, drawBanner). **Test:** ask to delete a test account; the top notice has no Undo button and its link scrolls to My account; Undo there works; after the 24 hours the password box and Delete everything still appear with the single Undo.
 
 - **W29 (the user's request v0.126, "we dont need to retype the email again in sign up"; written as apply-stage8w28.sh together with W28, waiting for the user's test; page only)** The Type your email again box and its check are removed from sign-up (public/login.html and public/js/auth-page.js). Known cost, accepted by the user's choice: a typo in the email at sign-up means Forgot password cannot reach that person; he signs up again with the right email. **Test:** sign up shows one Email box; sign-up and log in still work.
+
+- **W30 (bug report from the user v0.127: "the remove now in deletions does nothing"; written as apply-stage8w30.sh, waiting for the user's test; page only)** Cause: Remove now on a Deleting card is locked on purpose until the person's 24 hours are over (so a driver or student has time to report a problem and the person can undo; the rules would allow the owner earlier, the lock is in the admin page only, as before W27h), but the locked button was a disabled one, which looks like a normal button and does nothing. Fix: the button is now always tappable; while the 24 hours run it shows a message with the end time and says how to remove him sooner (More, Block, then Remove; a blocked person has Remove at once); after the 24 hours it removes as before. Open choice for the user: if he would rather let the owner remove at any time, it is a one-line change. **Test:** on a Deleting card press Remove now (message appears); after the 24 hours (or for a blocked person) Remove still asks first and removes.
 
 - **W12 (decided v0.95: option c; moved before the APK in v0.97)** Put a copy of Leaflet's files (a few hundred KB, free) inside the public folder and load them from there instead of cdnjs.cloudflare.com. Also works if a school network blocks cdnjs, and removes one outside service from the consent wording and the privacy page. No money involved.
 
