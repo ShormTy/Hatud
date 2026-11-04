@@ -28,6 +28,44 @@
       });
     });
 
+    // W17e: a status line flashes and the fare bumps when their text changes; a main button
+    // sends one soft ring when it becomes usable again. Nothing is saved or sent.
+    var lastText = new WeakMap();
+    function replay(node, name) {
+      node.classList.remove(name);
+      void node.offsetWidth;
+      node.classList.add(name);
+      node.addEventListener("animationend", function done() {
+        node.classList.remove(name);
+        node.removeEventListener("animationend", done);
+      });
+    }
+    if ("MutationObserver" in window) {
+      new MutationObserver(function (changes) {
+        changes.forEach(function (change) {
+          var node = change.target;
+          if (node.nodeType === 3) node = node.parentNode;
+          if (!node || !node.closest) return;
+          if (change.type === "attributes") {
+            if (change.attributeName === "disabled" && node.matches("button.primary")
+                && !node.disabled && node.offsetParent !== null) replay(node, "ready");
+            return;
+          }
+          var target = node.closest(".status, #driver-fare, #current-fare");
+          if (!target || target.offsetParent === null) return;
+          var text = target.textContent;
+          if (lastText.get(target) === text) return;
+          var firstTime = !lastText.has(target);
+          lastText.set(target, text);
+          if (firstTime || !text) return; // the first text on a page only appears, no flash
+          replay(target, target.classList.contains("status") ? "flash" : "bump");
+        });
+      }).observe(document.body, {
+        childList: true, characterData: true, subtree: true,
+        attributes: true, attributeFilter: ["disabled"]
+      });
+    }
+
     // 1. Cards and panels that are on the page now rise in one after another (at most 5 steps).
     var count = 0;
     var first = document.querySelectorAll("main > .card:not(.section), .panel");
