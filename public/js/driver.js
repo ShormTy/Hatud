@@ -5,6 +5,7 @@ import { db } from "./firebase.js";
 import { makeCaps } from "./caps.js";
 import { addReportControls, loadReported, disableReporting } from "./report.js";
 import { showAppeal } from "./appeal.js";
+import { mountDeleteAccount } from "./delete-account.js";
 import { confirmBox } from "./dialog.js";
 import { SUPPORT_EMAIL } from "./support.js";
 import { keepScreenOn } from "./wakelock.js";
@@ -988,6 +989,7 @@ requireRole("driver")
   .then(async (session) => {
     me = session;
     byId("hello").textContent = session.profile.name;
+    mountDeleteAccount({ role: "driver", user: session.user, profile: session.profile });
     const snap = await getDoc(doc(db, "drivers", session.user.uid));
     vehicle = snap.exists() ? snap.data() : null;
 

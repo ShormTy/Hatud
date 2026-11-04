@@ -4,6 +4,7 @@ import { requireRole, logOut } from "./session.js";
 import { db } from "./firebase.js";
 import { addReportControls, loadReported, disableReporting } from "./report.js";
 import { showAppeal } from "./appeal.js";
+import { mountDeleteAccount } from "./delete-account.js";
 import { confirmBox } from "./dialog.js";
 import { SUPPORT_EMAIL } from "./support.js";
 import {
@@ -733,6 +734,7 @@ requireRole("student")
   .then(async (session) => {
     me = session;
     byId("hello").textContent = session.profile.name;
+    mountDeleteAccount({ role: "student", user: session.user, profile: session.profile });
     if (session.profile.blocked === true) {
       requestButton.disabled = true;
       requestButton.textContent = "Account blocked";

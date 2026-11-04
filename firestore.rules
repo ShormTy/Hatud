@@ -66,8 +66,12 @@ service cloud.firestore {
         && exists(/databases/$(database)/documents/reportTally/$(uid))
         && get(/databases/$(database)/documents/reportTally/$(uid)).data.reporters.size() >= 3
         && request.auth.uid in get(/databases/$(database)/documents/reportTally/$(uid)).data.reporters;
-      // An admin can remove a profile (the login in Authentication stays).
-      allow delete: if isAdmin();
+      // An admin can remove a profile (the login in Authentication stays). A person can delete
+      // his own profile (W10b, Delete my account), unless he is blocked (so a blocked person
+      // cannot wipe his account and sign up again) or has an open request (his lock).
+      allow delete: if isAdmin()
+        || (isSelf(uid) && resource.data.blocked == false
+            && !exists(/databases/$(database)/documents/locks/$(uid)));
     }
 
     function isNewStudent(d) {
@@ -117,8 +121,10 @@ service cloud.firestore {
       allow update: if isAdmin()
         && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['approvalStatus'])
         && request.resource.data.approvalStatus in ['approved', 'pending'];
-      // An admin can remove a driver record.
-      allow delete: if isAdmin();
+      // An admin can remove a driver record. A driver can delete his own record only in the
+      // same save that deletes his profile (W10b).
+      allow delete: if isAdmin()
+        || (isSelf(uid) && !existsAfter(/databases/$(database)/documents/users/$(uid)));
     }
 
     function isNewDriverRecord(d) {
@@ -263,9 +269,11 @@ service cloud.firestore {
       // Tidy-up: the student can delete his own finished ride once its 30 days are
       // over (deleteAfter has passed). Only the student deletes, so his name and
       // contact number in the private record go away together with the ride.
+      // Also allowed at any time once his own profile is deleted (W10b: in the same save, or in the later small saves).
       allow delete: if isSelf(resource.data.studentId)
         && resource.data.status in ['completed', 'cancelled', 'expired']
-        && resource.data.deleteAfter <= request.time;
+        && (resource.data.deleteAfter <= request.time
+            || !existsAfter(/databases/$(database)/documents/users/$(request.auth.uid)));
 
       // The student's name and contact number live in a small private record next
       // to the ride, so drivers cannot see them before accepting.
@@ -285,7 +293,8 @@ service cloud.firestore {
         allow delete: if docId == 'student'
           && isSelf(get(/databases/$(database)/documents/rides/$(rideId)).data.studentId)
           && get(/databases/$(database)/documents/rides/$(rideId)).data.status in ['completed', 'cancelled', 'expired']
-          && get(/databases/$(database)/documents/rides/$(rideId)).data.deleteAfter <= request.time;
+          && (get(/databases/$(database)/documents/rides/$(rideId)).data.deleteAfter <= request.time
+              || !existsAfter(/databases/$(database)/documents/users/$(request.auth.uid)));
       }
     }
 
@@ -506,7 +515,9 @@ service cloud.firestore {
       allow update: if isAdmin()
         && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status'])
         && request.resource.data.status in ['new', 'denied'];
-      allow delete: if isAdmin();
+      // A person can delete his own appeal only in the same save that deletes his profile (W10b).
+      allow delete: if isAdmin()
+        || (isSelf(uid) && !existsAfter(/databases/$(database)/documents/users/$(uid)));
     }
 
     // Everything not listed above is denied.
