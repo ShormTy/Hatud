@@ -427,6 +427,25 @@ function orphanNoteCard(uid, n) {
   return card;
 }
 
+// ---------- W27d: "same number" hint ----------
+// Two accounts with the same contact number are only a hint, not proof (families share phones).
+// Numbers are compared by their last 10 digits, so 09171234567 and +63 917 123 4567 match.
+function numberKey(n) {
+  const digits = String(n || "").replace(/\D/g, "");
+  return digits.length >= 7 ? digits.slice(-10) : "";
+}
+
+function sameNumberHint(uid, u) {
+  const key = numberKey(u.contactNumber);
+  if (!key) return null;
+  const others = [...users].filter(([id, x]) => id !== uid && numberKey(x.contactNumber) === key);
+  if (!others.length) return null;
+  const names = others.slice(0, 3).map(([id, x]) =>
+    (x.name || id) + " (" + x.role + ", " + (STATE_LABELS[stateOf(id)] || "").toLowerCase() + ")");
+  const more = others.length > 3 ? " and " + (others.length - 3) + " more" : "";
+  return "Same contact number as " + names.join(", ") + more + ". This is only a hint: families and friends can share a phone.";
+}
+
 // One card for every person (not an admin).
 function userCard(uid, u) {
   const state = stateOf(uid);
@@ -450,6 +469,8 @@ function userCard(uid, u) {
   if (!u.blocked && reporterCount(uid) >= 3) {
     card.append(el("p", "Three or more different people reported this person, but the automatic block did not finish. Press Block.", "hint"));
   }
+  const same = sameNumberHint(uid, u);
+  if (same) card.append(el("p", same, "hint"));
   if (state === "deleting" && dueAt !== null) {
     card.append(line("Asked on:", when(u.deleteRequestedAt)));
     card.append(line("The 24 hours end:", new Date(dueAt).toLocaleString()));
