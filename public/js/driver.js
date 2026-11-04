@@ -7,6 +7,7 @@ import { showAppeal } from "./appeal.js";
 import { mountDeleteAccount } from "./delete-account.js";
 import { confirmBox } from "./dialog.js";
 import { SUPPORT_EMAIL } from "./support.js";
+import { makeChip, setChip } from "./chips.js";
 import { keepScreenOn } from "./wakelock.js";
 import { alertUser } from "./alerts.js";
 import {
@@ -774,8 +775,9 @@ function renderHistory() {
     const head = document.createElement("p");
     head.className = "ride-line";
     const strong = document.createElement("strong");
-    strong.textContent = when + " • " + (d.status === "completed" ? "Completed" : "Cancelled");
+    strong.textContent = when;
     head.appendChild(strong);
+    head.appendChild(makeChip(d.status === "completed" ? "Completed" : "Cancelled", d.status === "completed" ? "ok" : "bad"));
     item.appendChild(head);
     historyLine(item, "From:", placeText(d.pickup, "Pin A on the map"));
     historyLine(item, "To:", placeText(d.dropoff, "Pin B on the map"));
@@ -834,6 +836,7 @@ async function renderCurrent() {
     : agreed
       ? "The student agreed to the fare. You can leave for the pickup."
       : "Accepted. Waiting for the student to agree to the fare. You can’t leave until he agrees. His name and phone number appear when he agrees.";
+  setChip(byId("current-chip"), underway ? ["On the way", "go"] : agreed ? ["Agreed", "ok"] : ["Waiting for student", "wait"]);
   byId("advance").textContent = underway ? "Completed" : "I’m on the way";
   byId("advance").onclick = () => advance(active.id, underway ? "completed" : "on_the_way");
   byId("advance").disabled = !underway && !agreed;

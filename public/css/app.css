@@ -206,3 +206,79 @@ legend { padding: 0; margin-bottom: 4px; font-size: 14px; color: var(--muted); }
 @media (prefers-reduced-motion: reduce) {
   .logo-mini .logo-h, .logo-mini .streak { animation: none; }
 }
+
+/* W17a: warm accent next to the teal, softer cards and colored status chips.
+   Colors are variables, so light and dark both work. */
+:root {
+  --accent: #d97706;
+  --accent-text: #b45309;
+  --shadow: 0 1px 2px rgba(16, 24, 40, 0.06), 0 4px 14px rgba(16, 24, 40, 0.08);
+  --chip-ok-bg: #dcfce7;    --chip-ok-text: #166534;
+  --chip-wait-bg: #fef3c7;  --chip-wait-text: #92400e;
+  --chip-go-bg: #ccfbf1;    --chip-go-text: #115e59;
+  --chip-info-bg: #dbeafe;  --chip-info-text: #1e40af;
+  --chip-bad-bg: #fee2e2;   --chip-bad-text: #991b1b;
+  --chip-muted-bg: #e5e7eb; --chip-muted-text: #374151;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --accent: #fbbf24;
+    --accent-text: #fbbf24;
+    --shadow: 0 1px 2px rgba(0, 0, 0, 0.4), 0 4px 14px rgba(0, 0, 0, 0.35);
+    --chip-ok-bg: #14391f;    --chip-ok-text: #86efac;
+    --chip-wait-bg: #3b2f0b;  --chip-wait-text: #fcd34d;
+    --chip-go-bg: #0f3a36;    --chip-go-text: #5eead4;
+    --chip-info-bg: #1e2f52;  --chip-info-text: #93c5fd;
+    --chip-bad-bg: #3f1d1d;   --chip-bad-text: #fca5a5;
+    --chip-muted-bg: #2b3540; --chip-muted-text: #cbd5e1;
+  }
+}
+:root[data-theme="dark"] {
+  --accent: #fbbf24;
+  --accent-text: #fbbf24;
+  --shadow: 0 1px 2px rgba(0, 0, 0, 0.4), 0 4px 14px rgba(0, 0, 0, 0.35);
+  --chip-ok-bg: #14391f;    --chip-ok-text: #86efac;
+  --chip-wait-bg: #3b2f0b;  --chip-wait-text: #fcd34d;
+  --chip-go-bg: #0f3a36;    --chip-go-text: #5eead4;
+  --chip-info-bg: #1e2f52;  --chip-info-text: #93c5fd;
+  --chip-bad-bg: #3f1d1d;   --chip-bad-text: #fca5a5;
+  --chip-muted-bg: #2b3540; --chip-muted-text: #cbd5e1;
+}
+
+/* Rounder cards with a soft shadow */
+.card { border-radius: 18px; box-shadow: var(--shadow); }
+.request-card { border-radius: 16px; box-shadow: var(--shadow); }
+.driver-box { border-radius: 16px; box-shadow: var(--shadow); }
+
+/* Status lines get a warm bar on the left */
+.status { border-left: 4px solid var(--accent); border-radius: 12px; }
+
+/* The fare stands out in the warm accent */
+#driver-fare, #current-fare { font-weight: 700; color: var(--accent-text); }
+
+/* Status chips */
+.chip {
+  display: inline-block;
+  margin-left: 8px;
+  padding: 2px 10px;
+  border-radius: 999px;
+  font-size: 12px;
+  font-weight: 600;
+  line-height: 1.6;
+  vertical-align: middle;
+}
+.chip:empty { display: none; }
+.chip-ok { background: var(--chip-ok-bg); color: var(--chip-ok-text); }
+.chip-wait { background: var(--chip-wait-bg); color: var(--chip-wait-text); }
+.chip-go { background: var(--chip-go-bg); color: var(--chip-go-text); }
+.chip-info { background: var(--chip-info-bg); color: var(--chip-info-text); }
+.chip-bad { background: var(--chip-bad-bg); color: var(--chip-bad-text); }
+.chip-muted { background: var(--chip-muted-bg); color: var(--chip-muted-text); }
+
+/* Buttons give a small press feedback (off when the phone asks for less motion) */
+.primary, .secondary { transition: transform 0.08s ease; }
+.primary:active:not(:disabled), .secondary:active:not(:disabled) { transform: scale(0.98); }
+@media (prefers-reduced-motion: reduce) {
+  .primary, .secondary { transition: none; }
+  .primary:active:not(:disabled), .secondary:active:not(:disabled) { transform: none; }
+}

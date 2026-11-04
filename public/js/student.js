@@ -7,6 +7,7 @@ import { showAppeal } from "./appeal.js";
 import { mountDeleteAccount } from "./delete-account.js";
 import { confirmBox } from "./dialog.js";
 import { SUPPORT_EMAIL } from "./support.js";
+import { makeChip, setChip } from "./chips.js";
 import { alertUser } from "./alerts.js";
 import {
   doc,
@@ -438,6 +439,7 @@ function showActive(rideId, ride) {
             ? "Your driver is on the way, but it has been over 5 minutes. If he is not coming, you can cancel. You can also call or text him first."
             : "Your driver is on the way. Please call or text him if something changed. You can cancel if he has not arrived after 5 minutes.")
         : "Status: " + ride.status;
+  setChip(byId("active-chip"), ride.status === "requested" ? ["Waiting", "wait"] : accepted ? ["Accepted", "info"] : ["On the way", "go"]);
   byId("driver-box").classList.toggle("hidden", !hasDriver);
   byId("cancel").classList.toggle("hidden", underway && !canCancelLate);
   byId("cancel").textContent = underway ? "Driver is not here? Cancel the ride" : "Cancel request";
@@ -675,8 +677,9 @@ function renderHistory(past) {
     const head = document.createElement("p");
     head.className = "ride-line";
     const strong = document.createElement("strong");
-    strong.textContent = when + " • " + (words[d.status] || d.status);
+    strong.textContent = when;
     head.appendChild(strong);
+    head.appendChild(makeChip(words[d.status] || d.status, d.status === "completed" ? "ok" : d.status === "cancelled" ? "bad" : "muted"));
     item.appendChild(head);
     historyLine(item, "From:", placeText(d.pickup, "Pin A on the map"));
     historyLine(item, "To:", placeText(d.dropoff, "Pin B on the map"));
