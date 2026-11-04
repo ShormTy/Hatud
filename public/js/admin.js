@@ -9,6 +9,7 @@ import {
   getDocs,
   collection,
   updateDoc,
+  setDoc,
   deleteDoc,
   deleteField,
   writeBatch,
@@ -38,6 +39,7 @@ let admins = new Set();
 let removed = new Map();
 let tallies = new Map(); // reportTally: uid -> { reporters: [ids of DIFFERENT people who reported him] }
 let appeals = new Map(); // appeals: uid -> { message, status, createdAt }
+let notes = new Map(); // accountNotes (W27c): uid -> { text, updatedAt }
 let tab = "todo";
 let filter = "all"; // the chip chosen on the Users tab
 
@@ -63,6 +65,8 @@ function button(text, cls, onClick) {
 }
 
 const when = (t) => (t && t.toDate ? t.toDate().toLocaleString() : "");
+// A stand-in for a server time that was just saved, so the page can show it before the next Refresh.
+const justNow = () => ({ toDate: () => new Date(), toMillis: () => Date.now() });
 
 function who(uid) {
   const u = users.get(uid);
@@ -89,19 +93,21 @@ async function change(task, ask) {
 
 const setBlocked = (uid, value) => change(async () => {
   if (value) {
-    await updateDoc(doc(db, "users", uid), { blocked: true, blockedBy: "owner" });
+    await updateDoc(doc(db, "users", uid), { blocked: true, blockedBy: "owner", blockedAt: serverTimestamp() });
     users.get(uid).blocked = true;
     users.get(uid).blockedBy = "owner";
+    users.get(uid).blockedAt = justNow();
   } else {
     // Unblocking also clears the list of people who reported him (so one new report does not
     // block him again at once) and closes his appeal.
     const batch = writeBatch(db);
-    batch.update(doc(db, "users", uid), { blocked: false, blockedBy: deleteField() });
+    batch.update(doc(db, "users", uid), { blocked: false, blockedBy: deleteField(), blockedAt: deleteField() });
     batch.delete(doc(db, "reportTally", uid));
     batch.delete(doc(db, "appeals", uid));
     await batch.commit();
     users.get(uid).blocked = false;
     delete users.get(uid).blockedBy;
+    delete users.get(uid).blockedAt;
     tallies.delete(uid);
     appeals.delete(uid);
   }
@@ -120,8 +126,12 @@ const deleteAppeal = (uid) => change(async () => {
 }, "Delete the appeal of " + who(uid) + "? If he is still blocked, he can send a new appeal.");
 
 const setApproval = (uid, status) => change(async () => {
-  await updateDoc(doc(db, "drivers", uid), { approvalStatus: status });
+  await updateDoc(doc(db, "drivers", uid), status === "approved"
+    ? { approvalStatus: status, approvedAt: serverTimestamp() }
+    : { approvalStatus: status, approvedAt: deleteField() });
   drivers.get(uid).approvalStatus = status;
+  if (status === "approved") drivers.get(uid).approvedAt = justNow();
+  else delete drivers.get(uid).approvedAt;
 }, status === "approved"
   ? "Approve " + who(uid) + "? Only do this after you checked the papers and the vehicle in person."
   : "Set " + who(uid) + " back to pending? They will not see ride requests until you approve again.");
@@ -144,12 +154,14 @@ async function removePerson(uid) {
     if (d) batch.delete(doc(db, "drivers", uid));
     batch.delete(doc(db, "reportTally", uid));
     batch.delete(doc(db, "appeals", uid));
+    batch.delete(doc(db, "accountNotes", uid));
     await batch.commit();
     removed.set(uid, { ...note, removedAt: { toDate: () => new Date() } });
     users.delete(uid);
     drivers.delete(uid);
     tallies.delete(uid);
     appeals.delete(uid);
+    notes.delete(uid);
     done = true;
   }, "Remove " + who(uid) + "?\n\nThis deletes the profile (and the driver record). The login stays in Firebase Authentication, so the email stays taken until you delete it there. To keep someone out for good, use Block instead.");
   if (done) say("Removed. UID: " + uid + ". To free the email: Firebase console, Authentication, Users, three dots, Delete account.");
@@ -205,9 +217,10 @@ function tallyLine(card, uid) {
 
 function blockedWhy(uid, u) {
   const n = ((tallies.get(uid) || {}).reporters || []).length;
-  if (u.blockedBy === "auto") return "automatically, after reports from " + n + " different " + (n === 1 ? "person" : "people");
-  if (u.blockedBy === "owner") return "by the owner";
-  return "earlier (no record of who blocked)";
+  let why = "earlier (no record of who blocked)";
+  if (u.blockedBy === "auto") why = "automatically, after reports from " + n + " different " + (n === 1 ? "person" : "people");
+  else if (u.blockedBy === "owner") why = "by the owner";
+  return why + (u.blockedAt ? ", on " + when(u.blockedAt) : "");
 }
 
 function driverCard(uid, d) {
@@ -375,6 +388,45 @@ function inFilter(uid, u, key) {
   return true;
 }
 
+// ---------- W27c: the owner's private note ----------
+// Saving an empty box deletes the note. Only an admin can read it (rules: accountNotes).
+function noteEditor(uid) {
+  const wrap = el("div", null, "note-editor");
+  wrap.append(el("p", "Owner's private note (only an admin can read it; up to 200 characters; no ID numbers; an empty box deletes it)", "hint"));
+  const box = document.createElement("textarea");
+  box.maxLength = 200;
+  box.rows = 2;
+  box.value = (notes.get(uid) || {}).text || "";
+  wrap.append(box);
+  wrap.append(button("Save note", "secondary", () => change(async () => {
+    const text = box.value.trim().slice(0, 200);
+    if (!text) {
+      if (notes.has(uid)) {
+        await deleteDoc(doc(db, "accountNotes", uid));
+        notes.delete(uid);
+      }
+      return;
+    }
+    await setDoc(doc(db, "accountNotes", uid), { text, updatedAt: serverTimestamp() });
+    notes.set(uid, { text, updatedAt: justNow() });
+  })));
+  return wrap;
+}
+
+// A note whose person is gone (he deleted his own account, so Remove never ran for him).
+function orphanNoteCard(uid, n) {
+  const card = el("div", null, "history-item");
+  card.append(el("p", "Note about an account that is gone", "panel-title"));
+  card.append(line("Note:", n.text));
+  card.append(line("Saved:", when(n.updatedAt)));
+  card.append(line("ID:", uid));
+  card.append(button("Delete note", "secondary", () => change(async () => {
+    await deleteDoc(doc(db, "accountNotes", uid));
+    notes.delete(uid);
+  }, "Delete this note for good?")));
+  return card;
+}
+
 // One card for every person (not an admin).
 function userCard(uid, u) {
   const state = stateOf(uid);
@@ -411,11 +463,14 @@ function userCard(uid, u) {
     card.append(line("Message:", a.message));
   }
 
+  if (notes.has(uid)) card.append(line("Owner's note:", notes.get(uid).text));
   const details = document.createElement("details");
   details.append(el("summary", "Details"));
   details.append(line("Contact:", u.contactNumber));
   details.append(line("Signed up:", when(u.createdAt)));
+  if (d && d.approvalStatus === "approved") details.append(line("Approved on:", d.approvedAt ? when(d.approvedAt) : "date not recorded"));
   details.append(line("ID:", uid));
+  details.append(noteEditor(uid));
   details.append(line("Reports about this person:", String(reports.filter((r) => r.reportedId === uid).length)));
   if (tallies.has(uid)) {
     const n = reporterCount(uid);
@@ -567,6 +622,11 @@ function render() {
     empty = "No closed accounts.";
     [...removed].sort(([, a], [, b]) => (b.removedAt?.toMillis?.() || Date.now()) - (a.removedAt?.toMillis?.() || Date.now()))
       .forEach(([uid, n]) => cards.push(removedCard(uid, n)));
+    const orphans = [...notes].filter(([uid]) => !users.has(uid) && !admins.has(uid));
+    if (orphans.length) {
+      cards.push(el("p", "Notes about accounts that are gone (" + orphans.length + ")", "todo-heading"));
+      orphans.forEach(([uid, n]) => cards.push(orphanNoteCard(uid, n)));
+    }
   }
   byId("list").replaceChildren(...(cards.length ? cards : [el("p", empty, "hint")]));
 }
@@ -574,7 +634,8 @@ function render() {
 async function load() {
   say("Loading…");
   try {
-    const [u, d, r, a, x, t, p] = await Promise.all(["users", "drivers", "reports", "admins", "removedUsers", "reportTally", "appeals"].map((name) => getDocs(collection(db, name))));
+    const [u, d, r, a, x, t, p, nn] = await Promise.all(["users", "drivers", "reports", "admins", "removedUsers", "reportTally", "appeals", "accountNotes"].map((name) => getDocs(collection(db, name))));
+    notes = new Map(nn.docs.map((y) => [y.id, y.data()]));
     tallies = new Map(t.docs.map((y) => [y.id, y.data()]));
     appeals = new Map(p.docs.map((y) => [y.id, y.data()]));
     removed = new Map(x.docs.map((y) => [y.id, y.data()]));

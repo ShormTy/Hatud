@@ -50,19 +50,25 @@ service cloud.firestore {
       // An admin can change only the blocked flag and who blocked the person (W22).
       // blockedBy is "owner" when the admin blocks, and it is removed again on unblock.
       allow update: if isAdmin()
-        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['blocked', 'blockedBy'])
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['blocked', 'blockedBy', 'blockedAt'])
         && request.resource.data.blocked is bool
         && (!('blockedBy' in request.resource.data)
             || request.resource.data.blockedBy == null
-            || request.resource.data.blockedBy == 'owner');
+            || request.resource.data.blockedBy == 'owner')
+        // W27b: the date of the block is the server time (or removed again on unblock).
+        && (!('blockedAt' in request.resource.data)
+            || request.resource.data.blockedAt == null
+            || request.resource.data.blockedAt == request.time
+            || request.resource.data.blockedAt == resource.data.get('blockedAt', null));
       // Automatic block (W22): a person who reported this account can set blocked to true,
       // but only when the private list of different reporters (reportTally) holds 3 or more
       // people, and he is one of them. Nothing else can change.
       allow update: if request.auth != null
         && resource.data.blocked == false
-        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['blocked', 'blockedBy'])
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['blocked', 'blockedBy', 'blockedAt'])
         && request.resource.data.blocked == true
         && request.resource.data.blockedBy == 'auto'
+        && (!('blockedAt' in request.resource.data) || request.resource.data.blockedAt == request.time)
         && exists(/databases/$(database)/documents/reportTally/$(uid))
         && get(/databases/$(database)/documents/reportTally/$(uid)).data.reporters.size() >= 3
         && request.auth.uid in get(/databases/$(database)/documents/reportTally/$(uid)).data.reporters;
@@ -133,8 +139,13 @@ service cloud.firestore {
         && isText(request.resource.data.plateNumber, 12);
       // An admin can switch approvalStatus (and nothing else) between approved and pending.
       allow update: if isAdmin()
-        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['approvalStatus'])
-        && request.resource.data.approvalStatus in ['approved', 'pending'];
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['approvalStatus', 'approvedAt'])
+        && request.resource.data.approvalStatus in ['approved', 'pending']
+        // W27b: the date of the approval is the server time (or removed when set back to pending).
+        && (!('approvedAt' in request.resource.data)
+            || request.resource.data.approvedAt == null
+            || request.resource.data.approvedAt == request.time
+            || request.resource.data.approvedAt == resource.data.get('approvedAt', null));
       // An admin can remove a driver record. A driver can delete his own record only in the
       // same save that deletes his profile (W10b).
       allow delete: if isAdmin()
@@ -149,6 +160,18 @@ service cloud.firestore {
         && isPhone(d.contactNumber)
         && d.approvalStatus == 'pending'
         && d.available == false;
+    }
+
+    // ---- accountNotes: the owner's private note about a person (W27c) ----
+    // Only an admin can read, write or delete it. One text of 1 to 200 characters and the time
+    // it was saved. The person can never read it (it is not in his own records).
+    match /accountNotes/{uid} {
+      allow read, delete: if isAdmin();
+      allow create, update: if isAdmin()
+        && request.resource.data.keys().hasOnly(['text', 'updatedAt'])
+        && request.resource.data.keys().hasAll(['text', 'updatedAt'])
+        && isText(request.resource.data.text, 200)
+        && request.resource.data.updatedAt == request.time;
     }
 
     // ---- removedUsers: the owner's list of people removed from the admin page ----
