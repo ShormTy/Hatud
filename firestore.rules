@@ -241,14 +241,14 @@ service cloud.firestore {
       // The student can cancel his own request while it is open or accepted (the
       // "On the way" button will close this window in the next step), or close it
       // once it has really run out of time. Nothing else may change from his side.
-      // If the driver has been "on the way" for 10 minutes or more, the student may
+      // If the driver has been "on the way" for 5 minutes or more, the student may
       // cancel too (for example when the driver never comes). The choice is his.
       allow update: if isSelf(resource.data.studentId)
         && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status'])
         && ((resource.data.status in ['requested', 'accepted'] && request.resource.data.status == 'cancelled')
             || (resource.data.status == 'on_the_way'
                 && request.resource.data.status == 'cancelled'
-                && resource.data.startedAt <= request.time - duration.value(10, 'm'))
+                && resource.data.startedAt <= request.time - duration.value(5, 'm'))
             || (resource.data.status == 'requested'
                 && request.resource.data.status == 'expired'
                 && resource.data.expiresAt <= request.time));
@@ -323,7 +323,7 @@ service cloud.firestore {
 
       // The accepting driver moves his own ride forward: "On the way", then "Completed".
       // "On the way" needs the student's agreement to the fare first. After it, the
-      // student can cancel only when 10 minutes have passed (his rule above).
+      // student can cancel only when 5 minutes have passed (his rule above).
       allow update: if isApprovedDriverAny()
         && isSelf(resource.data.driverId)
         && resource.data.status == 'accepted'
@@ -401,7 +401,7 @@ service cloud.firestore {
             || (get(/databases/$(database)/documents/rides/$(resource.data.rideId)).data.status in ['requested', 'accepted']
              && getAfter(/databases/$(database)/documents/rides/$(resource.data.rideId)).data.status in ['cancelled', 'expired'])
             || (get(/databases/$(database)/documents/rides/$(resource.data.rideId)).data.status == 'on_the_way'
-                && get(/databases/$(database)/documents/rides/$(resource.data.rideId)).data.startedAt <= request.time - duration.value(10, 'm')
+                && get(/databases/$(database)/documents/rides/$(resource.data.rideId)).data.startedAt <= request.time - duration.value(5, 'm')
                 && getAfter(/databases/$(database)/documents/rides/$(resource.data.rideId)).data.status == 'cancelled')
             || get(/databases/$(database)/documents/rides/$(resource.data.rideId)).data.status == 'completed'
             || (get(/databases/$(database)/documents/rides/$(resource.data.rideId)).data.status == 'on_the_way'

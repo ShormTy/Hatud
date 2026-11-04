@@ -43,8 +43,8 @@ let planning = true;     // false while an open request is shown
 let fixedPins = [];      // pins of the open request (not draggable)
 let stopWatching = null; // stops the live listening on the open request
 let lastStatus = null;   // the status of the open request the last time the page saw it
-let cancelTimer = null;  // shows the late-cancel button once 10 minutes have passed
-const CANCEL_AFTER_MS = 10 * 60 * 1000;
+let cancelTimer = null;  // shows the late-cancel button once 5 minutes have passed
+const CANCEL_AFTER_MS = 5 * 60 * 1000;
 const BLOCKED_TEXT = "Your account is blocked, so you can’t make new requests. Please contact the owner at " + SUPPORT_EMAIL + ".";
 
 function say(text) {
@@ -420,7 +420,7 @@ function showActive(rideId, ride) {
   const accepted = ride.status === "accepted";
   const underway = ride.status === "on_the_way";
   const hasDriver = accepted || underway;
-  // After the driver taps "I'm on the way", the student can cancel only when 10 minutes have passed.
+  // After the driver taps "I'm on the way", the student can cancel only when 5 minutes have passed.
   const waitedMs = underway && ride.startedAt ? Date.now() - ride.startedAt.toDate().getTime() : 0;
   const canCancelLate = underway && waitedMs >= CANCEL_AFTER_MS;
   clearTimeout(cancelTimer);
@@ -434,8 +434,8 @@ function showActive(rideId, ride) {
       ? "A driver accepted your request. Please check the fare below. The driver can’t leave until you agree."
       : underway
         ? (canCancelLate
-            ? "Your driver is on the way, but it has been over 10 minutes. If he is not coming, you can cancel. You can also call or text him first."
-            : "Your driver is on the way. Please call or text him if something changed. You can cancel if he has not arrived after 10 minutes.")
+            ? "Your driver is on the way, but it has been over 5 minutes. If he is not coming, you can cancel. You can also call or text him first."
+            : "Your driver is on the way. Please call or text him if something changed. You can cancel if he has not arrived after 5 minutes.")
         : "Status: " + ride.status;
   byId("driver-box").classList.toggle("hidden", !hasDriver);
   byId("cancel").classList.toggle("hidden", underway && !canCancelLate);

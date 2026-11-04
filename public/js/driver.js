@@ -564,7 +564,7 @@ async function advance(id, status) {
   const ok = await confirmBox(status === "on_the_way"
     ? {
         title: "Leave for the pickup now?",
-        message: "Tap Yes when you are leaving. After this the student can cancel only if you have not arrived within 10 minutes.",
+        message: "Tap Yes when you are leaving. After this the student can cancel only if you have not arrived within 5 minutes.",
         okText: "Yes, I’m on the way",
         cancelText: "Not yet"
       }
