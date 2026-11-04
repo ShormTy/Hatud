@@ -350,3 +350,102 @@ input:focus-visible, select:focus-visible, textarea:focus-visible {
   outline: 2px solid var(--brand);
   outline-offset: 1px;
 }
+
+/* W17d: more animation on every page. The keyframes are here; every rule that uses them sits
+   inside the no-preference block, so a phone that asks for less motion sees none of it. */
+@keyframes hatud-rise { from { opacity: 0; transform: translateY(14px); } to { opacity: 1; transform: none; } }
+@keyframes step-pop { from { opacity: 0; transform: scale(0.3); } to { opacity: 1; transform: scale(1); } }
+@keyframes field-open { from { opacity: 0; transform: translateY(-6px); } to { opacity: 1; transform: none; } }
+@keyframes chip-pulse {
+  0%, 100% { box-shadow: 0 0 0 0 rgba(217, 119, 6, 0.45); }
+  60% { box-shadow: 0 0 0 6px rgba(217, 119, 6, 0); }
+}
+@keyframes theme-spin {
+  0% { transform: rotate(0deg) scale(1); }
+  50% { transform: rotate(180deg) scale(1.18); }
+  100% { transform: rotate(360deg) scale(1); }
+}
+@keyframes chip-pop-ok { from { opacity: 0; transform: scale(0.6); } to { opacity: 1; transform: scale(1); } }
+@keyframes chip-pop-wait { from { opacity: 0; transform: scale(0.6); } to { opacity: 1; transform: scale(1); } }
+@keyframes chip-pop-go { from { opacity: 0; transform: scale(0.6); } to { opacity: 1; transform: scale(1); } }
+@keyframes chip-pop-info { from { opacity: 0; transform: scale(0.6); } to { opacity: 1; transform: scale(1); } }
+@keyframes chip-pop-bad { from { opacity: 0; transform: scale(0.6); } to { opacity: 1; transform: scale(1); } }
+@keyframes chip-pop-muted { from { opacity: 0; transform: scale(0.6); } to { opacity: 1; transform: scale(1); } }
+
+@media (prefers-reduced-motion: no-preference) {
+
+  /* 1. Cards and panels rise in. A panel that was hidden rises again when it appears.
+        motion.js sets --rise-delay so the ones on the page at the start follow one another. */
+  main > .card, .panel {
+    animation: hatud-rise 0.5s cubic-bezier(0.2, 0.8, 0.2, 1) backwards;
+    animation-delay: var(--rise-delay, 0s);
+  }
+
+  /* 2. Home page cards fade in as you scroll (motion.js adds html.motion-ok and reveal-in). */
+  html.motion-ok main > .card.section {
+    animation: none;
+    opacity: 0;
+    transform: translateY(18px);
+    transition: opacity 0.55s ease, transform 0.55s ease;
+    transition-delay: var(--rise-delay, 0s);
+  }
+  html.motion-ok main > .card.section.reveal-in { opacity: 1; transform: none; }
+
+  /* 3. The numbered steps pop in one by one once their card is showing. */
+  .card.reveal-in .steps li::before { animation: step-pop 0.5s cubic-bezier(0.34, 1.56, 0.64, 1) backwards; }
+  .card.reveal-in .steps li:nth-child(1)::before { animation-delay: calc(var(--rise-delay, 0s) + 0.30s); }
+  .card.reveal-in .steps li:nth-child(2)::before { animation-delay: calc(var(--rise-delay, 0s) + 0.42s); }
+  .card.reveal-in .steps li:nth-child(3)::before { animation-delay: calc(var(--rise-delay, 0s) + 0.54s); }
+
+  /* 4. Buttons: a smoother press, and on a mouse a small lift and glow on hover. */
+  .primary, .secondary {
+    transition: transform 0.12s ease, filter 0.15s ease, box-shadow 0.15s ease,
+                border-color 0.15s ease, background-color 0.15s ease;
+  }
+  @media (hover: hover) and (pointer: fine) {
+    .primary:hover:not(:disabled) { transform: translateY(-1px); filter: brightness(1.08); }
+    .secondary:hover:not(:disabled) { transform: translateY(-1px); border-color: var(--brand); }
+    body:not(.app-page) .primary:not(.ghost):hover:not(:disabled) { box-shadow: 0 10px 22px rgba(13, 148, 136, 0.4); }
+    body:not(.app-page) .primary.ghost:hover:not(:disabled) { background: rgba(13, 148, 136, 0.1); }
+    .primary:active:not(:disabled), .secondary:active:not(:disabled) { transform: scale(0.98); }
+  }
+
+  /* 5. The Log in / Sign up switch: one teal pill glides between the two buttons.
+        Browsers that cannot do :has keep the plain switch from W17c. */
+  @supports selector(:has(a)) {
+    body:not(.app-page) .tabs { position: relative; }
+    body:not(.app-page) .tabs::before {
+      content: "";
+      position: absolute;
+      top: 4px;
+      bottom: 4px;
+      left: 4px;
+      width: calc((100% - 12px) / 2);
+      border-radius: 10px;
+      background: var(--brand);
+      box-shadow: 0 1px 4px rgba(0, 0, 0, 0.2);
+      transition: transform 0.28s cubic-bezier(0.3, 0.9, 0.3, 1);
+    }
+    body:not(.app-page) .tabs:has(> #tab-signup[aria-selected="true"])::before { transform: translateX(calc(100% + 4px)); }
+    body:not(.app-page) .tabs button { position: relative; z-index: 1; transition: color 0.25s ease; }
+    body:not(.app-page) .tabs button[aria-selected="true"] { background: transparent; box-shadow: none; }
+  }
+  /* The sign-up fields (and the student or driver part) fade open when they appear. */
+  .signup-only:not(.hidden), .student-only:not(.hidden), .driver-only:not(.hidden) {
+    animation: field-open 0.35s ease-out backwards;
+  }
+
+  /* 6. Status chips pop in when they appear or change kind; "Waiting" also pulses gently. */
+  .chip-ok { animation: chip-pop-ok 0.4s cubic-bezier(0.34, 1.56, 0.64, 1) backwards; }
+  .chip-go { animation: chip-pop-go 0.4s cubic-bezier(0.34, 1.56, 0.64, 1) backwards; }
+  .chip-info { animation: chip-pop-info 0.4s cubic-bezier(0.34, 1.56, 0.64, 1) backwards; }
+  .chip-bad { animation: chip-pop-bad 0.4s cubic-bezier(0.34, 1.56, 0.64, 1) backwards; }
+  .chip-muted { animation: chip-pop-muted 0.4s cubic-bezier(0.34, 1.56, 0.64, 1) backwards; }
+  .chip-wait {
+    animation: chip-pop-wait 0.4s cubic-bezier(0.34, 1.56, 0.64, 1) backwards,
+               chip-pulse 2.4s ease-in-out 0.6s infinite;
+  }
+
+  /* 7. The theme button spins when tapped (motion.js adds and removes the class "spin"). */
+  .theme-btn.spin { animation: theme-spin 0.5s ease-in-out; }
+}
