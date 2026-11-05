@@ -1,6 +1,6 @@
-# Hatud: Project Brief (draft v0.171)
+# Hatud: Project Brief (draft v0.172)
 
-> **For any AI reading this:** This file is the full context for the Hatud project. Read it before replying. Treat the "Decisions" section as settled unless the user reopens it. Do not re-propose rejected ideas without new reasoning. Last updated: November 5, 2026 (v0.171).
+> **For any AI reading this:** This file is the full context for the Hatud project. Read it before replying. Treat the "Decisions" section as settled unless the user reopens it. Do not re-propose rejected ideas without new reasoning. Last updated: November 5, 2026 (v0.172).
 
 ---
 
@@ -294,6 +294,8 @@ When the user confirms an item works, the AI moves its line here from Section 10
 
 - **W3 + W4 (accepted; written as apply-stage8w3w4.sh (v0.167); confirmed v0.168: the user said everything works)** W3: public/manifest.webmanifest has id /login.html (same as start_url), categories travel and navigation, and a third icon public/icons/icon-maskable-512.png (purpose maskable: solid dark #11171d background, the teal H and speed lines inside the safe area, drawn by the AI); the two transparent icons stay for purpose any. W4: public/offline.html (all inline, light and dark, Try again button, reloads by itself when the signal returns) and public/sw.js, which keeps ONLY /offline.html in the cache hatud-offline-v1 and shows it when a PAGE load fails for lack of signal; scripts, styles, map tiles and Firebase traffic are plain network with nothing cached, so the site is always the newest code and live ride data is never stale. If the offline file cannot be cached the worker still installs. Tested by the user on a phone (offline page shows, comes back by itself).
 
+- **W1 (accepted; PWABuilder package made v0.169; the APK fingerprint was checked against assetlinks.json by the AI; apk folder kept beside public and in .gitignore (apply-apkfolder.sh, v0.170); written as apply-stageC1.sh (v0.171); confirmed v0.172: the user said everything works)** https://hatud.web.app/.well-known/assetlinks.json is live (file at public/well-known/assetlinks.json, rewrite and Content-Type header in firebase.json; package app.web.hatud.twa). The keystore, its password (signing-key-info.txt) and the APK/AAB stay in the apk folder, which git ignores because the repository is public; the user must keep a backup copy outside the laptop.
+
 ---
 
 ## 9. Instructions for the next AI session
@@ -334,11 +336,9 @@ All Phase A items are done and confirmed (v0.150). Next: Phase B.
 ### Phase C: APK build prep (after Phase B)
 
 
-- **W1 (accepted, must)** Serve the Digital Asset Links file. firebase.json ignores everything starting with a dot (`**/.*`), which hides `.well-known`. Put the file at public/well-known/assetlinks.json and add a rewrite from /.well-known/assetlinks.json to it plus a Content-Type application/json header; check the address in a browser. Two steps: the file needs the signing-key fingerprint that PWABuilder gives after the package is made. Use exactly https://hatud.web.app in PWABuilder. Keep the signing key and its password safe outside the repository (a lost key means no updates for installed APKs). **Status (v0.169): PWABuilder has made Hatud.apk, Hatud.aab, signing.keystore and assetlinks.json (package app.web.hatud.twa). The AI checked that the APK's SHA-256 fingerprint (BA:23:F4:0D:...:F2:A2:BC) matches the one in assetlinks.json, so step 2 is done. Still to do: step 1, apply-stageC1.sh (v0.171) copies the file to public/well-known/assetlinks.json and adds the rewrite and Content-Type header to firebase.json; then deploy and open https://hatud.web.app/.well-known/assetlinks.json to check. The PWABuilder folder is kept in an apk folder beside public in the project, listed in .gitignore (the repository is public, so the keystore must never be committed; apply-apkfolder.sh, v0.170). The copy of assetlinks.json in public/well-known is committed on purpose (it is not secret). The user must also back up signing.keystore and its password outside the repository.**
-
 - **W2 (accepted, must)** Tick location delegation in the PWABuilder Android options (both the student's Use my location and the driver's map use the location); test on a real phone that the permission box appears and the blue dot shows. **Status (v0.169): not yet tested; the AI cannot tell from the files whether the box was ticked. Test after the assetlinks file is live.**
 
-- Build the APK with PWABuilder (exactly https://hatud.web.app), add the fingerprint (W1 step 2), test on 2 to 3 real Android phones, write the one-page install guide.
+- Build the APK with PWABuilder (exactly https://hatud.web.app), test on 2 to 3 real Android phones, write the one-page install guide.
 
 ### Phase D: before real users join (last)
 
