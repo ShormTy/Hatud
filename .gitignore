@@ -26,3 +26,5 @@ Thumbs.db
 
 # Local files for myself
 plan/HATUD_ALL_CODE.txt
+# APK files and signing key (never commit; the repository is public)
+apk/
