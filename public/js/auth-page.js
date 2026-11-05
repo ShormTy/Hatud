@@ -315,7 +315,25 @@ signOutButton.addEventListener("click", async () => {
 });
 
 // Runs on page load and every time someone signs in or out.
+// First open of the app (v0.182): a signed-out person who has never seen the home page
+// and did not come from another Hatud page is sent to the home page once.
+// A signed-in person is not affected: render() sends him to his own page.
+function firstOpenGoesHome() {
+  try {
+    if (localStorage.getItem("hatudSeenHome")) return false;
+  } catch (e) {
+    return false; // storage not available: stay here, never loop
+  }
+  if (location.hash) return false; // for example login.html#signup
+  const ref = document.referrer || ""; // empty or android-app://... when the app is launched
+  return !ref.startsWith(location.origin);
+}
+
 onAuthStateChanged(auth, (user) => {
+  if (!user && !busy && firstOpenGoesHome()) {
+    location.replace("index.html");
+    return;
+  }
   render(user);
 });
 
