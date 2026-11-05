@@ -1,6 +1,6 @@
-# Hatud: Project Brief (draft v0.168)
+# Hatud: Project Brief (draft v0.170)
 
-> **For any AI reading this:** This file is the full context for the Hatud project. Read it before replying. Treat the "Decisions" section as settled unless the user reopens it. Do not re-propose rejected ideas without new reasoning. Last updated: November 5, 2026 (v0.168).
+> **For any AI reading this:** This file is the full context for the Hatud project. Read it before replying. Treat the "Decisions" section as settled unless the user reopens it. Do not re-propose rejected ideas without new reasoning. Last updated: November 5, 2026 (v0.170).
 
 ---
 
@@ -334,9 +334,9 @@ All Phase A items are done and confirmed (v0.150). Next: Phase B.
 ### Phase C: APK build prep (after Phase B)
 
 
-- **W1 (accepted, must)** Serve the Digital Asset Links file. firebase.json ignores everything starting with a dot (`**/.*`), which hides `.well-known`. Put the file at public/well-known/assetlinks.json and add a rewrite from /.well-known/assetlinks.json to it plus a Content-Type application/json header; check the address in a browser. Two steps: the file needs the signing-key fingerprint that PWABuilder gives after the package is made. Use exactly https://hatud.web.app in PWABuilder. Keep the signing key and its password safe outside the repository (a lost key means no updates for installed APKs).
+- **W1 (accepted, must)** Serve the Digital Asset Links file. firebase.json ignores everything starting with a dot (`**/.*`), which hides `.well-known`. Put the file at public/well-known/assetlinks.json and add a rewrite from /.well-known/assetlinks.json to it plus a Content-Type application/json header; check the address in a browser. Two steps: the file needs the signing-key fingerprint that PWABuilder gives after the package is made. Use exactly https://hatud.web.app in PWABuilder. Keep the signing key and its password safe outside the repository (a lost key means no updates for installed APKs). **Status (v0.169): PWABuilder has made Hatud.apk, Hatud.aab, signing.keystore and assetlinks.json (package app.web.hatud.twa). The AI checked that the APK's SHA-256 fingerprint (BA:23:F4:0D:...:F2:A2:BC) matches the one in assetlinks.json, so step 2 is done. Still to do: step 1, put the file at public/well-known/assetlinks.json, add the rewrite and Content-Type header to firebase.json, deploy, and open https://hatud.web.app/.well-known/assetlinks.json to check. The PWABuilder folder is kept in an apk folder beside public in the project, listed in .gitignore (the repository is public, so the keystore must never be committed; apply-apkfolder.sh, v0.170). The copy of assetlinks.json in public/well-known is committed on purpose (it is not secret). The user must also back up signing.keystore and its password outside the repository.**
 
-- **W2 (accepted, must)** Tick location delegation in the PWABuilder Android options (both the student's Use my location and the driver's map use the location); test on a real phone that the permission box appears and the blue dot shows.
+- **W2 (accepted, must)** Tick location delegation in the PWABuilder Android options (both the student's Use my location and the driver's map use the location); test on a real phone that the permission box appears and the blue dot shows. **Status (v0.169): not yet tested; the AI cannot tell from the files whether the box was ticked. Test after the assetlinks file is live.**
 
 - Build the APK with PWABuilder (exactly https://hatud.web.app), add the fingerprint (W1 step 2), test on 2 to 3 real Android phones, write the one-page install guide.
 
