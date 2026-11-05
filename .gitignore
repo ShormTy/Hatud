@@ -42,3 +42,6 @@ plan/
 .claude/
 CLAUDE.md
 apply-*.sh
+
+# Attack tests for the rules (W14), kept only on my computer
+rules-tests/
