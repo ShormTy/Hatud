@@ -93,4 +93,3 @@ A deploy is manual. Pushing to GitHub does not deploy. Deploy the rules before t
  
 - **No secrets, ever.** No passwords, tokens, private keys, app passwords or APK signing keys (the `apk/` folder is in `.gitignore` for this reason), because the repository is public. The Firebase web settings in `js/firebase-config.js` are public by design; the protection comes from `firestore.rules`.
 - Nothing may need a credit card.
-- Keep the project brief (`plan/HATUD_PROJECT_BRIEF.md`, on the owner's computer) up to date; it is the full context for anyone (or any AI) continuing the project.
