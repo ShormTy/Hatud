@@ -1,0 +1,8 @@
+[{
+      "relation": ["delegate_permission/common.handle_all_urls"],
+      "target": {
+        "namespace": "android_app",
+        "package_name": "app.web.hatud.twa",
+        "sha256_cert_fingerprints": ["BA:23:F4:0D:64:92:77:AA:FE:BF:72:7C:4D:47:52:C6:49:68:8A:80:DD:76:C8:11:51:43:FE:87:41:F2:A2:BC"]
+      }
+    }]
