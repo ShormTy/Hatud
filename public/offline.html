@@ -1,0 +1,58 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>No internet • Hatud</title>
+  <meta name="robots" content="noindex">
+  <meta name="theme-color" content="#11171d">
+  <meta name="color-scheme" content="light dark">
+  <style>
+    :root { --bg: #f4f7f8; --card: #ffffff; --text: #17212b; --muted: #5b6b78; --brand: #0b7c72; --line: #d9e2e6; }
+    @media (prefers-color-scheme: dark) {
+      :root { --bg: #11171d; --card: #1a232b; --text: #e8eef2; --muted: #9fb0bc; --brand: #2dd4bf; --line: #2a3640; }
+    }
+    * { box-sizing: border-box; }
+    body { margin: 0; min-height: 100vh; display: flex; align-items: center; justify-content: center; padding: 16px;
+           background: var(--bg); color: var(--text); font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; }
+    main { width: 100%; max-width: 420px; text-align: center; }
+    .logo { width: 140px; height: auto; color: var(--brand); }
+    h1 { margin: 6px 0 0; font-size: 28px; }
+    .card { margin-top: 16px; padding: 22px 18px; background: var(--card); border: 1px solid var(--line); border-radius: 16px; }
+    h2 { margin: 0 0 8px; font-size: 20px; }
+    p { margin: 0 0 10px; color: var(--muted); line-height: 1.45; }
+    button { margin-top: 6px; width: 100%; padding: 13px 16px; font: inherit; font-weight: 600; border: 0; border-radius: 12px;
+             background: var(--brand); color: #ffffff; cursor: pointer; }
+    @media (prefers-color-scheme: dark) { button { color: #0b1413; } }
+    .small { margin: 14px 0 0; font-size: 13px; }
+  </style>
+</head>
+<body>
+  <main>
+    <svg class="logo" viewBox="56 140 400 232" role="img" aria-label="Hatud logo">
+      <g transform="translate(14 0)" fill="currentColor">
+        <rect x="100" y="185" width="68" height="22" rx="11" fill-opacity=".5"/>
+        <rect x="70" y="245" width="98" height="22" rx="11" fill-opacity=".85"/>
+        <rect x="112" y="305" width="56" height="22" rx="11" fill-opacity=".5"/>
+        <g transform="translate(256 256) skewX(-14) translate(-256 -256)">
+          <rect x="206" y="156" width="56" height="200" rx="14"/>
+          <rect x="330" y="156" width="56" height="200" rx="14"/>
+          <rect x="206" y="232" width="180" height="48" rx="10"/>
+        </g>
+      </g>
+    </svg>
+    <h1>Hatud</h1>
+    <div class="card">
+      <h2>No internet connection</h2>
+      <p>Hatud needs a signal to show rides and requests. Check your mobile data or Wi-Fi.</p>
+      <p>This page tries again by itself when your signal comes back.</p>
+      <button type="button" id="retry">Try again</button>
+      <p class="small">If you are on a ride, you can still call or text your driver or student.</p>
+    </div>
+  </main>
+  <script>
+    document.getElementById("retry").addEventListener("click", function () { location.reload(); });
+    window.addEventListener("online", function () { location.reload(); });
+  </script>
+</body>
+</html>
