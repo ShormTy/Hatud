@@ -67,7 +67,8 @@
           }
         ]
       }
-    ]
+    ],
+    "appAssociation": "NONE"
   },
   "firestore": {
     "database": "(default)",

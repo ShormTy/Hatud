@@ -1,6 +1,6 @@
-# Hatud: Project Brief (draft v0.172)
+# Hatud: Project Brief (draft v0.173)
 
-> **For any AI reading this:** This file is the full context for the Hatud project. Read it before replying. Treat the "Decisions" section as settled unless the user reopens it. Do not re-propose rejected ideas without new reasoning. Last updated: November 5, 2026 (v0.172).
+> **For any AI reading this:** This file is the full context for the Hatud project. Read it before replying. Treat the "Decisions" section as settled unless the user reopens it. Do not re-propose rejected ideas without new reasoning. Last updated: November 5, 2026 (v0.173).
 
 ---
 
@@ -294,8 +294,6 @@ When the user confirms an item works, the AI moves its line here from Section 10
 
 - **W3 + W4 (accepted; written as apply-stage8w3w4.sh (v0.167); confirmed v0.168: the user said everything works)** W3: public/manifest.webmanifest has id /login.html (same as start_url), categories travel and navigation, and a third icon public/icons/icon-maskable-512.png (purpose maskable: solid dark #11171d background, the teal H and speed lines inside the safe area, drawn by the AI); the two transparent icons stay for purpose any. W4: public/offline.html (all inline, light and dark, Try again button, reloads by itself when the signal returns) and public/sw.js, which keeps ONLY /offline.html in the cache hatud-offline-v1 and shows it when a PAGE load fails for lack of signal; scripts, styles, map tiles and Firebase traffic are plain network with nothing cached, so the site is always the newest code and live ride data is never stale. If the offline file cannot be cached the worker still installs. Tested by the user on a phone (offline page shows, comes back by itself).
 
-- **W1 (accepted; PWABuilder package made v0.169; the APK fingerprint was checked against assetlinks.json by the AI; apk folder kept beside public and in .gitignore (apply-apkfolder.sh, v0.170); written as apply-stageC1.sh (v0.171); confirmed v0.172: the user said everything works)** https://hatud.web.app/.well-known/assetlinks.json is live (file at public/well-known/assetlinks.json, rewrite and Content-Type header in firebase.json; package app.web.hatud.twa). The keystore, its password (signing-key-info.txt) and the APK/AAB stay in the apk folder, which git ignores because the repository is public; the user must keep a backup copy outside the laptop.
-
 ---
 
 ## 9. Instructions for the next AI session
@@ -335,6 +333,8 @@ All Phase A items are done and confirmed (v0.150). Next: Phase B.
 
 ### Phase C: APK build prep (after Phase B)
 
+
+- **W1 (accepted, must; REOPENED v0.173, the v0.172 "confirmed" was a mistake: the page showed [] and the AI wrongly accepted it)** The package app.web.hatud.twa and its fingerprint are correct (the AI checked the APK), apply-apkfolder.sh and apply-stageC1.sh are applied, but https://hatud.web.app/.well-known/assetlinks.json returns an empty [] with Firebase's own headers (cache-control private, no-store), and Google's check lists no statements, so the phone shows an address bar. Cause: Firebase Hosting makes its own assetlinks.json by default and ignores our rewrite. Fix: "appAssociation": "NONE" in firebase.json (apply-stageC1b.sh, v0.173, deploys by itself). Done only when the address shows the JSON with app.web.hatud.twa, Google's check (digitalassetlinks.googleapis.com/v1/statements:list?source.web.site=https://hatud.web.app&relation=delegate_permission/common.handle_all_urls) lists it, and the phone shows no address bar after uninstalling, clearing Chrome data and reinstalling. Keep the apk folder in .gitignore (public repository) and keep a backup of the keystore and signing-key-info.txt outside the laptop.
 
 - **W2 (accepted, must)** Tick location delegation in the PWABuilder Android options (both the student's Use my location and the driver's map use the location); test on a real phone that the permission box appears and the blue dot shows. **Status (v0.169): not yet tested; the AI cannot tell from the files whether the box was ticked. Test after the assetlinks file is live.**
 
