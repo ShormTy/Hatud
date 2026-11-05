@@ -28,3 +28,17 @@ Thumbs.db
 plan/HATUD_ALL_CODE.txt
 # APK files and signing key (never commit; the repository is public)
 apk/
+
+# Kept only on my computer (minimal public repository)
+plan/
+.vscode/
+.idea/
+*.apk
+*.aab
+*.zip
+*.tar.gz
+*.bak
+*.orig
+.claude/
+CLAUDE.md
+apply-*.sh
