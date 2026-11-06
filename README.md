@@ -6,7 +6,7 @@ Live site: https://hatud.web.app
 Install page: https://hatud.web.app/install.html
 Help: hatud.support@gmail.com
  
-Status: the pilot build is finished and tested on real Android phones (login, rides, fare agreement, history, reports, admin page, account settings, installable app, Android APK 1.0.0.1, install guide). Next: the security checks before real users join, then the pilot at Tagbilaran City College.
+Status: the pilot build is finished and tested on real Android phones (login, rides, fare agreement, history, reports, admin page, account settings, installable app, Android APK 1.0.0.1, install guide). The database security rules also passed 210 automated attack tests in the Firebase emulator. Next: the owner's last checks, then the pilot at Tagbilaran City College.
  
 ## What it does
  
@@ -47,7 +47,7 @@ Status: the pilot build is finished and tested on real Android phones (login, ri
   - `vendor/leaflet/` is a copy of the Leaflet 1.9.4 map software (BSD 2-Clause license), served from this site so no outside service delivers it.
 - `firestore.rules` and `firestore.indexes.json` are the database rules and indexes.
 - `firebase.json` and `.firebaserc` connect this folder to the Firebase project.
-- Kept only on the owner's computer, **not in this repository** (all listed in `.gitignore`): `plan/` (the project brief), `apk/` (the PWABuilder output: `Hatud.apk`, `Hatud.aab`, `signing.keystore`, `signing-key-info.txt`) and the `apply-*.sh` helper scripts.
+- Kept only on the owner's computer, **not in this repository** (all listed in `.gitignore`): `plan/` (the project brief), `apk/` (the PWABuilder output: `Hatud.apk`, `Hatud.aab`, `signing.keystore`, `signing-key-info.txt`), `rules-tests/` (the emulator tests of the security rules) and the `apply-*.sh` helper scripts.
 ## Deploy
  
     firebase deploy --only hosting      # the website
@@ -55,6 +55,15 @@ Status: the pilot build is finished and tested on real Android phones (login, ri
  
 A deploy is manual. Pushing to GitHub does not deploy. Deploy the rules before the pages when a change touches both. After a deploy that changes CSS or JavaScript, a phone may need its site data cleared once.
  
+## Test the security rules
+
+The rules in `firestore.rules` are tested against the Firebase emulator, a fake local database. Nothing touches the live data and no accounts are needed. The tests (210, in 10 groups) try to break the rules: sign-up and profiles, driver approval, creating rides, accepting and fares, student details, cancel timing, old-data cleanup, reports and blocks, account deletion and the admin powers.
+
+    cd rules-tests && npm install    # once
+    bash rules-tests/run.sh          # from the Hatud folder; needs Java
+
+Run the whole set again after ANY change to `firestore.rules`, and deploy the rules only when every test passes. `rules-tests/` stays on the owner's computer and is not in this repository.
+
 ## Android app (APK)
  
 - Package: `app.web.hatud.twa`, made with PWABuilder from exactly `https://hatud.web.app`, with location delegation switched on (so "Use my location" and the driver map ask for location inside the app). When making a new APK, type the Package ID as `app.web.hatud.twa` and check the result.
@@ -77,13 +86,14 @@ A deploy is manual. Pushing to GitHub does not deploy. Deploy the rules before t
  
 - Saved: name, contact number, school (students), vehicle type and plate (drivers), ride records, and reports. The owner can add a short private note about an account.
 - A student's name and number are shown to a driver only after the driver accepts AND the student agrees to the fare. The driver's details are shown to the student after acceptance.
+- Every approved driver can see the exact pickup and drop-off points (and their names) of open requests before accepting one. A student's name and number stay private until the fare is agreed.
 - Driver location is never saved. The app does not track the student's location; "Use my location as pickup" only fills in the pickup pin of that one ride when the student taps it. Pickup, drop-off and driver points are sent to the free OSRM routing server for routes.
 - Ride records are deleted 30 days after the ride, when the student, the driver or the owner (admin page) next opens the app. Reports hold only ids, a reason and an optional short note, and stay until the owner deletes them.
 - Delete my account removes the profile, driver record, finished rides and the login after a 24-hour countdown. Reports about the person are kept on purpose.
 - The consent wording on the sign-up page and `privacy.html` are drafts for the owner to review under the Data Privacy Act of 2012 (RA 10173).
 ## Known limits
  
-- The security rules have been checked by real use, not yet by the Firebase emulator. A written list of attack tests comes before real users join.
+- The emulator tests check the rules file, not the live project. After a rules change, deploy from the tested file (`firebase deploy --only firestore`).
 - Expired requests are hidden by the driver page, and one active ride per driver is enforced by the page, not by the rules.
 - Cleanup of old data runs only when someone opens the app; there is no server.
 - A person who is not blocked can delete his account and sign up again with a new email.
