@@ -6,7 +6,7 @@ Live site: https://hatud.web.app
 Install page: https://hatud.web.app/install.html
 Help: hatud.support@gmail.com
  
-Status: the pilot build is finished and tested on real Android phones (login, rides, fare agreement, history, reports, admin page, account settings, installable app, Android APK 1.0.0.1, install guide). The database security rules also passed 210 automated attack tests in the Firebase emulator. Next: the owner's last checks, then the pilot at Tagbilaran City College.
+Status: the pilot build is finished and tested on real Android phones (login, rides, fare agreement, history, reports, admin page, account settings, installable app, Android APK 1.0.0.1, install guide). The database security rules also passed 292 automated attack tests in the Firebase emulator. Next: the owner's last checks, then the pilot at Tagbilaran City College.
  
 ## What it does
  
@@ -57,7 +57,7 @@ A deploy is manual. Pushing to GitHub does not deploy. Deploy the rules before t
  
 ## Test the security rules
 
-The rules in `firestore.rules` are tested against the Firebase emulator, a fake local database. Nothing touches the live data and no accounts are needed. The tests (210, in 10 groups) try to break the rules: sign-up and profiles, driver approval, creating rides, accepting and fares, student details, cancel timing, old-data cleanup, reports and blocks, account deletion and the admin powers.
+The rules in `firestore.rules` are tested against the Firebase emulator, a fake local database. Nothing touches the live data and no accounts are needed. The tests (292, in 11 groups) try to break the rules: sign-up and profiles, driver approval, creating rides, accepting and fares, student details, cancel timing, old-data cleanup, reports and blocks, account deletion, the admin powers, reports and appeals, and removed people.
 
     cd rules-tests && npm install    # once
     bash rules-tests/run.sh          # from the Hatud folder; needs Java
